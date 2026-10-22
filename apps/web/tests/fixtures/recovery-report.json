@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "scan": {
+    "id": "01466854c2684488bfb102c961654f40",
+    "mode": "deep",
+    "status": "complete",
+    "checkpoint": 8530,
+    "total": 8530,
+    "started_at": "2026-10-22T05:50:03.354571+00:00"
+  },
+  "candidates": [
+    {
+      "name": "png_000000000ffd.png",
+      "kind": "png",
+      "size": 109,
+      "extents": [
+        {
+          "offset": 4093,
+          "length": 109
+        }
+      ],
+      "method": "signature carving",
+      "status": "Verified intact",
+      "reasons": [
+        "PNG chunk checksums and image decoder passed",
+        "Carving assumes contiguous bytes; original name and path unknown"
+      ],
+      "sha256": "b2b635e8592e2c53fd99cb89db5515c1b694e5ade929bd08f93c905ca651ce00",
+      "id": "1b7a75bea37f4eb285305557da594d86"
+    },
+    {
+      "name": "pdf_00000000206a.pdf",
+      "kind": "pdf",
+      "size": 232,
+      "extents": [
+        {
+          "offset": 8298,
+          "length": 232
+        }
+      ],
+      "method": "signature carving",
+      "status": "Likely recoverable",
+      "reasons": [
+        "PDF header, objects, startxref and first EOF found; renderer and later revisions unverified",
+        "Carving assumes contiguous bytes; original name and path unknown"
+      ],
+      "sha256": "516879c96d542ae5392a742a04b468310f8c548e9b50b365a60602146728156e",
+      "id": "36407354973847b5b71ec1d6924a6ab0"
+    }
+  ],
+  "privacy": "Contains filenames and offsets. Import only into a trusted viewer."
+}

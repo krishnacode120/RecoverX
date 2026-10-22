@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recoverx"
+version = "0.1.0"
+description = "Read-only disk image analysis and evidence-based recovery"
+requires-python = ">=3.12"
+dependencies = ["Pillow>=11.3,<14"]
+
+[project.optional-dependencies]
+desktop = ["PySide6-Essentials>=6.8,<7"]
+dev = ["pytest>=8,<10", "ruff>=0.11", "pyinstaller>=6.12", "pip-audit>=2.9", "cmake>=3.28", "ninja>=1.11", "pybind11>=2.13"]
+tsk = ["pytsk3>=20250312"]
+
+[project.scripts]
+recoverx = "recoverx.cli:main"
+recoverx-desktop = "recoverx.desktop:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

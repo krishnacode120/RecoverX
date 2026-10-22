@@ -1,0 +1,512 @@
+"""Native interface; every disk operation runs outside the GUI thread."""
+
+from io import BytesIO
+import json
+from pathlib import Path
+import sys
+
+from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from .engine import run_scan
+from .models import Control, RecoveryError
+from .restore import image_device, recover, write_json_exclusive
+from .source import ImageSource
+from .store import Store, protect_history
+from .windows import WindowsRawSource, enumerate_devices
+
+
+class Worker(QThread):
+    progress = Signal(int, int, str)
+    result = Signal(object)
+    error = Signal(str)
+
+    def __init__(self, operation, control):
+        super().__init__()
+        self.operation, self.control = operation, control
+
+    def run(self):
+        try:
+            # Qt int signals are 32-bit: report progress as bounded per-mille; actual bytes in text.
+            def progress(done, total, phase):
+                self.progress.emit(
+                    int(1000 * done / total) if total else 0, 1000, f"{phase} · {done:,} / {total:,} bytes"
+                )
+
+            self.result.emit(self.operation(self.control, progress))
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
+class Window(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("RecoverX · Local recovery workspace")
+        self.resize(1160, 790)
+        data = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
+        data.mkdir(parents=True, exist_ok=True)
+        self.db = str(data / "history.sqlite")
+        self.source_path, self.scan_id, self.page = None, None, 0
+        self.worker, self.control, self.items = None, Control(), []
+        shell = QWidget()
+        self.setCentralWidget(shell)
+        layout = QVBoxLayout(shell)
+        title = QLabel("RECOVERX    /    Your files. Your machine.")
+        title.setStyleSheet("font-size: 24px; font-weight: 700; padding: 16px")
+        layout.addWidget(title)
+        note = QLabel("Read-only analysis · No cloud account · Nothing uploaded · Build 0.1.0 (experimental)")
+        note.setStyleSheet("color: #8da9cb; padding: 0 16px 12px")
+        layout.addWidget(note)
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+        self.setup_scan()
+        self.setup_devices()
+        self.setup_history()
+        self.setup_help()
+        self.bar, self.phase = (
+            QProgressBar(),
+            QLabel("Ready. Select a disposable image or an authorized source."),
+        )
+        self.bar.setRange(0, 1000)
+        layout.addWidget(self.bar)
+        layout.addWidget(self.phase)
+        controls = QHBoxLayout()
+        self.pause = QPushButton("Pause")
+        self.pause.clicked.connect(self.toggle_pause)
+        self.cancel = QPushButton("Cancel")
+        self.cancel.clicked.connect(lambda: self.control.cancelled.set())
+        controls.addWidget(self.pause)
+        controls.addWidget(self.cancel)
+        layout.addLayout(controls)
+        self.pause.setEnabled(False)
+        self.cancel.setEnabled(False)
+        self.setStyleSheet("""
+            QWidget {background:#0b1220; color:#dce8fa; font-size:13px;}
+            QPushButton {background:#173052; border:1px solid #28466b; padding:10px 16px; border-radius:6px;}
+            QPushButton:hover {background:#20529b;} QPushButton:disabled {color:#65748a;}
+            QTableWidget, QTextEdit, QComboBox {background:#111e31; border:1px solid #253650;}
+            QHeaderView::section {background:#17283e; padding:8px; border:0;}
+            QTabBar::tab {padding:12px 20px;} QTabBar::tab:selected {color:#5ba8ff;}
+            QProgressBar {border:1px solid #253650; height:18px; text-align:center;}
+            QProgressBar::chunk {background:#2784ee;}
+        """)
+
+    def setup_scan(self):
+        page, box = QWidget(), QVBoxLayout()
+        page.setLayout(box)
+        self.tabs.addTab(page, "Recovery workspace")
+        row = QHBoxLayout()
+        choose = QPushButton("Open raw image")
+        choose.clicked.connect(self.choose_image)
+        self.image_label = QLabel("No image selected")
+        self.mode = QComboBox()
+        self.mode.addItems(["deep", "quick"])
+        self.start = QPushButton("Start scan")
+        self.start.clicked.connect(self.start_scan)
+        for widget in (choose, self.image_label, self.mode, self.start):
+            row.addWidget(widget)
+        box.addLayout(row)
+        self.consent = QCheckBox(
+            "I am authorized to analyze this source. I understand recovery is not guaranteed."
+        )
+        box.addWidget(self.consent)
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["Select / name", "Type", "Bytes", "Content status", "Evidence"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.itemSelectionChanged.connect(self.preview)
+        box.addWidget(self.table)
+        pages = QHBoxLayout()
+        previous, following, select = (
+            QPushButton("Previous 200"),
+            QPushButton("Next 200"),
+            QPushButton("Select extractable on page"),
+        )
+        previous.clicked.connect(lambda: self.change_page(-1))
+        following.clicked.connect(lambda: self.change_page(1))
+        select.clicked.connect(self.select_page)
+        self.page_label = QLabel("No scan")
+        for w in (previous, following, select, self.page_label):
+            pages.addWidget(w)
+        box.addLayout(pages)
+        self.details, self.thumbnail = QTextEdit(), QLabel()
+        self.details.setReadOnly(True)
+        self.details.setMaximumHeight(140)
+        box.addWidget(self.details)
+        box.addWidget(self.thumbnail)
+        self.same_disk = QCheckBox(
+            "Allow output on the image file's disk (image files only; never raw device imaging)"
+        )
+        box.addWidget(self.same_disk)
+        row = QHBoxLayout()
+        restore, report = QPushButton("Recover selected to…"), QPushButton("Export scan report…")
+        restore.clicked.connect(self.restore_selected)
+        report.clicked.connect(self.export_report)
+        row.addWidget(restore)
+        row.addWidget(report)
+        box.addLayout(row)
+
+    def setup_devices(self):
+        page, box = QWidget(), QVBoxLayout()
+        page.setLayout(box)
+        self.tabs.addTab(page, "Devices & imaging")
+        box.addWidget(
+            QLabel(
+                "Create an image on another physical disk before analysis. No device opens until you explicitly start imaging."
+            )
+        )
+        self.devices = QComboBox()
+        box.addWidget(self.devices)
+        refresh = QPushButton("Discover Windows storage devices")
+        refresh.clicked.connect(self.discover)
+        box.addWidget(refresh)
+        self.device_info = QTextEdit()
+        self.device_info.setReadOnly(True)
+        box.addWidget(self.device_info)
+        self.device_consent = QCheckBox(
+            "I am authorized to read the selected physical disk and save its contents locally."
+        )
+        box.addWidget(self.device_consent)
+        image = QPushButton("Create verified raw image…")
+        image.clicked.connect(self.create_image)
+        box.addWidget(image)
+
+    def setup_history(self):
+        page, box = QWidget(), QVBoxLayout()
+        page.setLayout(box)
+        self.tabs.addTab(page, "History & resume")
+        self.history = QComboBox()
+        box.addWidget(self.history)
+        refresh, load, resume = (
+            QPushButton("Refresh local history"),
+            QPushButton("View results"),
+            QPushButton("Resume deep scan with selected image"),
+        )
+        refresh.clicked.connect(self.refresh_history)
+        load.clicked.connect(self.load_history)
+        resume.clicked.connect(lambda: self.start_scan(resume=True))
+        for w in (refresh, load, resume):
+            box.addWidget(w)
+        box.addWidget(
+            QLabel(
+                "History stores scan evidence locally. Reopen the matching image to preview or export files.\n"
+                "Deep scans resume from a committed block checkpoint. Quick scans restart."
+            )
+        )
+        box.addStretch()
+        self.refresh_history()
+
+    def setup_help(self):
+        help_text = QTextEdit()
+        help_text.setReadOnly(True)
+        help_text.setPlainText(
+            "RecoverX 0.1.0\n\n"
+            "1. Work from an image where possible. Never install or save onto media containing deleted files.\n"
+            "2. Select a raw image and consent. Deep scan finds file structures; quick scan reads FAT32/exFAT metadata.\n"
+            "3. Review evidence. A filename or signature is not proof of recoverable content.\n"
+            "4. Select candidates and choose a different destination. Existing files are never replaced.\n"
+            "5. Export a JSON report to view in the web dashboard. Reports contain names and offsets; review before sharing.\n\n"
+            "Limits: FAT32 single-cluster deleted files; exFAT root files with provable extents; 32 MiB carving limit. "
+            "NTFS/ext4 metadata, EWF, virtual disk containers, encrypted volumes, and fragmented carving are not supported. "
+            "No recovery of overwritten or TRIM-discarded bytes. Hardware failures need specialist imaging.\n\n"
+            "Previews show bounded metadata and image thumbnails only. Recovered scripts, macros and binaries never run.\n"
+            "No local network listener starts with this application. No silent privilege elevation.\n\n"
+            "Storage: " + self.db
+        )
+        self.tabs.addTab(help_text, "Guide & settings")
+
+    def busy(self):
+        return self.worker is not None and self.worker.isRunning()
+
+    def execute(self, operation, finished):
+        if self.busy():
+            return
+        self.control = Control()
+        self.worker = Worker(operation, self.control)
+        self.worker.progress.connect(self.on_progress)
+        self.worker.error.connect(lambda message: QMessageBox.warning(self, "RecoverX", message))
+        self.worker.result.connect(finished)
+        self.worker.finished.connect(self.idle)
+        self.start.setEnabled(False)
+        self.pause.setEnabled(True)
+        self.cancel.setEnabled(True)
+        self.worker.start()
+
+    def idle(self):
+        self.start.setEnabled(True)
+        self.pause.setEnabled(False)
+        self.cancel.setEnabled(False)
+        self.pause.setText("Pause")
+        self.refresh_history()
+
+    def on_progress(self, done, total, phase):
+        self.bar.setValue(done)
+        self.phase.setText(phase)
+
+    def toggle_pause(self):
+        if self.control.paused.is_set():
+            self.control.paused.clear()
+            self.pause.setText("Pause")
+        else:
+            self.control.paused.set()
+            self.pause.setText("Resume")
+
+    def choose_image(self):
+        if self.busy():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose raw disk image", "", "Raw images (*.img *.raw *.dd);;All files (*)"
+        )
+        if path:
+            try:
+                protect_history(path, self.db)
+            except RecoveryError as exc:
+                QMessageBox.warning(self, "Source conflict", str(exc))
+                return
+            self.source_path = path
+            self.image_label.setText(Path(path).name)
+            self.consent.setChecked(False)
+
+    def start_scan(self, checked=False, resume=False):
+        if self.busy():
+            return
+        if not self.source_path or not self.consent.isChecked():
+            QMessageBox.information(
+                self, "Select and authorize", "Choose an image and check the authorization box first."
+            )
+            return
+        path, mode, db = self.source_path, self.mode.currentText(), self.db
+        resume_id = self.history.currentData() if resume else None
+        if resume:
+            mode = "deep"
+
+        def operation(control, progress):
+            store = Store(db)
+            try:
+                with ImageSource(path) as source:
+                    return run_scan(source, store, mode, control, progress, resume_id)
+            finally:
+                store.close()
+
+        self.execute(operation, self.scan_finished)
+
+    def scan_finished(self, scan_id):
+        self.scan_id, self.page = scan_id, 0
+        self.load_results()
+        self.tabs.setCurrentIndex(0)
+
+    def load_results(self):
+        if not self.scan_id:
+            return
+        store = Store(self.db)
+        try:
+            self.items = store.results(self.scan_id, self.page * 200, 200)
+            count, state = store.count(self.scan_id), store.get(self.scan_id)["status"]
+        finally:
+            store.close()
+        self.table.setRowCount(len(self.items))
+        for row, item in enumerate(self.items):
+            for col, text in enumerate(
+                [item.name, item.kind, str(item.size), item.status, "; ".join(item.reasons)]
+            ):
+                cell = QTableWidgetItem(text)
+                if col == 0:
+                    cell.setCheckState(Qt.CheckState.Unchecked)
+                    if not item.sha256:
+                        cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
+                self.table.setItem(row, col, cell)
+        self.page_label.setText(f"{count} candidates · page {self.page + 1} · {state}")
+        self.phase.setText(f"Scan {state}. Review the evidence before extraction.")
+
+    def change_page(self, delta):
+        if not self.scan_id or self.busy():
+            return
+        if delta > 0 and len(self.items) < 200:
+            return
+        self.page = max(0, self.page + delta)
+        self.load_results()
+
+    def select_page(self):
+        for row, item in enumerate(self.items):
+            if item.sha256:
+                self.table.item(row, 0).setCheckState(Qt.CheckState.Checked)
+
+    def preview(self):
+        row = self.table.currentRow()
+        if row < 0 or row >= len(self.items):
+            return
+        item = self.items[row]
+        self.details.setPlainText(json.dumps(item.to_dict(), indent=2))
+        self.thumbnail.clear()
+        # Metadata preview always available. Decode only small, validated image candidates.
+        if (
+            not self.source_path
+            or self.busy()
+            or item.kind not in ("jpg", "png", "gif", "bmp", "webp")
+            or not item.sha256
+            or item.size > 4 * 1024 * 1024
+        ):
+            return
+        try:
+            from PIL import Image
+
+            with ImageSource(self.source_path) as source:
+                self.assert_source(source)
+                content = b"".join(source.read(e.offset, e.length) for e in item.extents)
+            with Image.open(BytesIO(content)) as image:
+                if image.width * image.height > 16_000_000:
+                    return
+                image.thumbnail((240, 100))
+                stream = BytesIO()
+                image.convert("RGB").save(stream, "PNG")
+            pixmap = QPixmap()
+            pixmap.loadFromData(stream.getvalue(), "PNG")
+            self.thumbnail.setPixmap(pixmap)
+        except Exception:
+            self.thumbnail.setText("Thumbnail unavailable; metadata remains accessible.")
+
+    def assert_source(self, source):
+        store = Store(self.db)
+        try:
+            if json.loads(store.get(self.scan_id)["source_identity"]) != source.identity:
+                raise RecoveryError("The selected image does not match this scan")
+        finally:
+            store.close()
+
+    def restore_selected(self):
+        if self.busy() or not self.scan_id or not self.source_path:
+            return
+        selected = [
+            item
+            for row, item in enumerate(self.items)
+            if self.table.item(row, 0).checkState() == Qt.CheckState.Checked
+        ]
+        if not selected:
+            QMessageBox.information(self, "Selection", "Select at least one extractable candidate.")
+            return
+        destination = QFileDialog.getExistingDirectory(self, "Choose recovery destination")
+        if not destination:
+            return
+        path, allow, scan_id, db = self.source_path, self.same_disk.isChecked(), self.scan_id, self.db
+
+        def operation(control, progress):
+            outcomes = []
+            store = Store(db)
+            try:
+                with ImageSource(path) as source:
+                    if json.loads(store.get(scan_id)["source_identity"]) != source.identity:
+                        raise RecoveryError("Selected image does not match the scan")
+                    for item in selected:
+                        control.check()
+                        try:
+                            outcomes.append(recover(source, item, destination, control, progress, allow))
+                        except RecoveryError as exc:
+                            outcomes.append({"filename": item.name, "status": "failed", "error": str(exc)})
+                return outcomes
+            finally:
+                store.close()
+
+        self.execute(operation, lambda outcomes: self.details.setPlainText(json.dumps(outcomes, indent=2)))
+
+    def export_report(self):
+        if not self.scan_id or self.busy():
+            return
+        target, _ = QFileDialog.getSaveFileName(
+            self, "Export report (contains filenames)", "recoverx-report.json", "JSON (*.json)"
+        )
+        if target:
+            store = Store(self.db)
+            try:
+                write_json_exclusive(target, store.report(self.scan_id))
+                self.phase.setText("Report exported. No data was uploaded.")
+            except Exception as exc:
+                QMessageBox.warning(self, "Report", str(exc))
+            finally:
+                store.close()
+
+    def discover(self):
+        def finished(devices):
+            self.devices.clear()
+            for d in devices:
+                self.devices.addItem(
+                    f"Disk {d['number']} · {d['name']} · {d['size']:,} bytes · {d['bus']}", d
+                )
+            self.device_info.setPlainText(json.dumps(devices, indent=2))
+
+        self.execute(lambda *_: enumerate_devices(), finished)
+
+    def create_image(self):
+        if self.busy() or not self.devices.currentData() or not self.device_consent.isChecked():
+            return
+        device = self.devices.currentData()
+        target, _ = QFileDialog.getSaveFileName(
+            self, "Save on another physical disk", "disk.img", "Raw image (*.img)"
+        )
+        if not target:
+            return
+
+        def operation(control, progress):
+            current = next((d for d in enumerate_devices() if d["number"] == device["number"]), None)
+            if current != device:
+                raise RecoveryError("Device information changed; rediscover and authorize again")
+            with WindowsRawSource(device["number"], device["size"], device["sector_size"]) as source:
+                return image_device(source, target, control, progress)
+
+        self.execute(operation, lambda result: self.device_info.setPlainText(json.dumps(result, indent=2)))
+
+    def refresh_history(self):
+        store = Store(self.db)
+        try:
+            rows = store.db.execute(
+                "SELECT id,mode,status,started_at FROM scans ORDER BY started_at DESC LIMIT 200"
+            ).fetchall()
+            self.history.clear()
+            for row in rows:
+                self.history.addItem(f"{row[3]} · {row[1]} · {row[2]} · {row[0][:8]}", row[0])
+        finally:
+            store.close()
+
+    def load_history(self):
+        if self.history.currentData() and not self.busy():
+            self.scan_finished(self.history.currentData())
+
+    def closeEvent(self, event):
+        if self.busy():
+            self.control.cancelled.set()
+            self.phase.setText("Cancelling safely. Close again after the worker stops.")
+            event.ignore()
+        else:
+            event.accept()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("RecoverX")
+    window = Window()
+    window.show()
+    if "--smoke-test" in sys.argv:
+        QTimer.singleShot(500, app.quit)
+    return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
