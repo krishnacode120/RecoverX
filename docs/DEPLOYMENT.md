@@ -8,7 +8,7 @@ For cloud accounts, provision a private PostgreSQL/Neon database and apply `data
 
 Without credentials the public website and browser-local report workspace work, while the account page clearly reports unavailable cloud configuration. Cloud storage has not been verified until real sign-in, owner isolation, save and deletion have been tested. Migration includes connected-agent/recovery/audit tables reserved for future integration; current endpoints use users and scan_sessions.
 
-The included GitHub workflow verifies source/builds on pushes and pull requests. Vercel Git integration can deploy after those checks. Publishing native artifacts is manual until signing credentials and a target repository are supplied. No workflow fabricates success or posts a download URL.
+The included GitHub workflow verifies source/builds on pushes and pull requests. The private repository is [krishnacode120/RecoverX](https://github.com/krishnacode120/RecoverX), default branch `main`. Vercel Git integration can deploy after those checks. Publishing native artifacts is manual until signing and release qualification are complete. No workflow fabricates success or posts a download URL.
 
 ## Windows distribution
 
@@ -16,6 +16,6 @@ Run `scripts/package-windows.ps1` on Windows x64 with Python dependencies instal
 
 ## Current blockers
 
-No repository remote, Vercel project/authorization, GitHub OAuth client, database URL, production domain or signing certificate was supplied. A public deployment cannot be claimed from a local build. Inspect VERIFICATION.md for the current build/packaging outcome.
+The repository is created and source is pushed. No Vercel project/authorization, GitHub OAuth client, database URL, production domain or signing certificate was supplied. A public deployment cannot be claimed from a local build. Inspect VERIFICATION.md for the current build/packaging outcome.
 
 References consulted during implementation: [Next.js installation](https://nextjs.org/docs/app/getting-started/installation), [Vercel Function limitations](https://vercel.com/docs/functions/limitations), [The Sleuth Kit licensing](https://www.sleuthkit.org/sleuthkit/licenses.php). Versioned installed dependencies and the lockfile are the implementation baseline.

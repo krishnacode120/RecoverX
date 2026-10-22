@@ -12,13 +12,13 @@ This document records completed checks and unresolved release gates. It does not
 | C++20 native test executable | Passed, exit 0; overlap, empty input, invalid signature and density checks |
 | Next.js production build | Passed on Next.js 16.4.2 with webpack |
 | Web lint and TypeScript | Passed |
-| Web schema unit tests | Initial five tests passed; exported Python report also imported successfully in the live browser |
+| Web schema unit tests | Six tests passed, including the exported Python report fixture; report also imported successfully in the live browser |
 | HTTP routes | `/`, `/dashboard`, `/docs`, `/download`, `/contact`, `/account`, `/api/health`: 200; unauthenticated `/api/reports`: 401 |
 | Browser workflow | Imported real generated-image JSON; two candidates, correct PNG/PDF sizes, distinct statuses and matching PNG hash visible; evidence dialog verified |
 | Production npm audit | Zero reported advisories at verification time |
 | Full npm audit | Nine development-tool advisories: four moderate, five high; not silently forced to breaking versions |
 | Synthetic scan benchmark | 128 MiB zero-filled file in 1.905 s, 67.18 MiB/s; Python tracked allocation peak 2,119,526 bytes. Warm cache possible, not hardware recovery performance |
-| GitHub repository | Private repository created at https://github.com/krishnacode120/RecoverX; push and CI verification follow |
+| GitHub repository | Source pushed to private repository https://github.com/krishnacode120/RecoverX on main; web and native CI passed on initial push. Linux desktop smoke exposed a missing libEGL runtime, now installed explicitly by CI; rerun pending |
 
 ## Recovery evidence
 
@@ -29,7 +29,11 @@ This document records completed checks and unresolved release gates. It does not
 
 ## Packaging investigation
 
-PyInstaller built the portable application and Inno Setup 6.7.3 compiled an installer. The compiler's Authenticode signature was valid, publisher Pyrsys B.V. The first packaged startup failed because a toolchain ICU DLL was bundled instead of using Windows' unversioned ICU API. The console diagnostic passed after removing that incompatible dependency. The checked-in spec excludes that DLL; the final rebuilt package requires a fresh smoke check before handoff. Installer remains unsigned and intended for development validation.
+PyInstaller built the portable application and Inno Setup 6.7.3 compiled an installer. The compiler's Authenticode signature was valid, publisher Pyrsys B.V. The first packaged startup failed because a toolchain ICU DLL was bundled instead of using Windows' unversioned ICU API. The checked-in spec excludes that DLL; the final rebuilt portable application's offscreen startup smoke passed, exit 0. Installer remains unsigned and intended for development validation; installation/uninstallation and clean-machine compatibility have not been qualified.
+
+- Installer: `dist/installer/RecoverX-Setup-0.1.0.exe`, 32,430,488 bytes.
+- SHA-256: `0679e3aae076034688dd6e57891c3c1ba4a8e9fabe22c0080926c6d67e00f263`.
+- Review Inno Setup's commercial licensing requirements before commercial distribution.
 
 ## Environment findings and remaining gates
 
