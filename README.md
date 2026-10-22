@@ -1,19 +1,75 @@
 # RecoverX
 
-RecoverX is an **experimental, local-first data recovery implementation**, not a qualified forensic product. It performs genuine read-only raw-image scans, conservative deleted-entry discovery, format-aware carving, and hash-verified export. It never creates simulated production recovery results.
+[![Verify RecoverX](https://github.com/krishnacode120/RecoverX/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/krishnacode120/RecoverX/actions/workflows/ci.yml)
 
-## Run locally
+**Local disk-image recovery with a Windows desktop application and a web report workspace.**
 
-Requires Python 3.12+, Node 20.9+ (Node 22/24 recommended), and Windows x64 for the native device API. Raw image analysis is portable.
+RecoverX scans raw disk images for deleted filesystem entries and recognizable file content, records the evidence for each candidate, and verifies exported bytes with SHA-256. Storage analysis runs locally. The Next.js website displays imported reports and can optionally store account summaries.
+
+**Status: 0.1.0 — tested development milestone.** The core works against generated disk images, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [verification record](docs/VERIFICATION.md) for completed checks.
+
+## What works
+
+| Component | Implemented scope |
+| --- | --- |
+| Image analysis | Read-only raw `.img`, `.raw`, and `.dd` files; superfloppy, primary MBR, and CRC-validated GPT layouts; 512/4096-byte sector sizes |
+| Quick scan | Conservative FAT32 and exFAT deleted-entry analysis within the limits below |
+| Deep scan | Streaming signature discovery, bounded contiguous carving, format validation, progress, cancellation, and persisted resume checkpoints |
+| Export | Destination checks, normalized filenames, no overwrite, temporary output, atomic publication, and SHA-256 verification after writing |
+| Desktop | PySide6 interface for scanning, pause/cancel, paginated results, image thumbnails, selection/export, local history, reports, and Windows device imaging |
+| Web | Next.js dashboard with JSON report import, search, filters, charts, and candidate evidence; reports stay in browser memory until explicitly saved as cloud summaries |
+| Optional local agent | Token-protected, time-limited, read-only access to one scan's report; the desktop does not start it automatically |
+| Optional cloud accounts | GitHub authentication and PostgreSQL summary endpoints; require configuration and live integration testing |
+
+### Filesystem and format coverage
+
+- **FAT32:** traverses active directories and discovers deleted short-name entries. Extraction is limited to unallocated, single-cluster files.
+- **exFAT:** analyzes deleted entry sets in the root directory, checks allocation state, and uses explicit contiguous extents or surviving FAT chains.
+- **Carving and validation:** JPEG, PNG, BMP, WebP, GIF, ZIP/Office archives, PDF, WAV/AVI, MP4/MOV, SQLite, and 7z have varying levels of decoding or structural validation. These checks do not establish complete semantic integrity for every format.
+- **Discovery only:** TIFF, RAR, MKV, MP3, and FLAC signatures are reported as unresolved; signature detection alone does not make a file exportable.
+
+NTFS/ext4 metadata recovery, nested exFAT directories, FAT32 long-name reconstruction, EWF/VHD/VHDX/QCOW containers, and fragmented raw carving are not implemented. Contiguous carving is capped at 32 MiB. The optional TSK dependency does not enable a working TSK adapter. See [all limitations](docs/LIMITATIONS.md).
+
+## Data handling and recovery limits
+
+RecoverX opens analysis sources read-only. Keep the application, scan database, reports, and recovered output on a different physical disk from the media being recovered. Prefer an offline image or a write-blocked source; a mounted disk can change while it is being read.
+
+Export verification proves that the written bytes match the candidate bytes read from the image. It does **not** prove those bytes match the original file before deletion. The generated test fixtures provide independent original hashes for that stronger comparison.
+
+Overwritten bytes, TRIM-discarded blocks, inaccessible encrypted content, and physically unreadable data cannot be reconstructed by this implementation. Windows imaging stops at the first read error and has not been qualified on failing hardware. Only access media you own or are authorized to examine.
+
+## Quick start
+
+### Requirements
+
+| Requirement | Used for |
+| --- | --- |
+| Git and access to this repository | Cloning the source |
+| Python 3.12+ | Recovery engine, CLI, and desktop; CI uses Python 3.12 |
+| Windows x64 | Windows desktop distribution and native device APIs; raw-image engine tests also run on Linux |
+| Node.js 22 and npm | Web development; Node 22 is the CI baseline |
+| CMake 3.28+ and a C++20 compiler | Optional native matcher build and tests |
+| Inno Setup 6 | Windows installer creation |
+
+The following commands use PowerShell and start at the repository root. They use the virtual environment directly, so activation is optional.
+
+### Desktop application
 
 ```powershell
+git clone https://github.com/krishnacode120/RecoverX.git
+cd RecoverX
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[desktop,dev]"
-recoverx-desktop
+.\.venv\Scripts\python.exe -m pip install -e ".[desktop,dev]"
+.\.venv\Scripts\python.exe -m recoverx.desktop
 ```
 
-The desktop uses PySide6 Essentials; it does not need Qt WebEngine or a cloud account. The app includes image selection, explicit authorization, background scanning, progress, pause/cancel, paginated results, image thumbnails, selection, destination selection, export verification, local history, deep-scan resume, and device imaging.
+Ordinary image-file scans do not require administrator rights. Windows physical-device imaging may require an explicitly elevated session; RecoverX does not elevate itself. See [installation and device imaging](docs/INSTALLATION.md).
+
+For a CLI-only environment, install `.[dev]` instead. On Linux, use `.venv/bin/python`; Qt desktop smoke tests additionally need platform runtime libraries, including `libegl1` and `libopengl0` on Ubuntu.
+
+### Web workspace
+
+In a separate terminal, from the repository root:
 
 ```powershell
 cd apps/web
@@ -21,60 +77,118 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Next.js. The website cannot read physical disk sectors. Its functional report workspace imports desktop JSON reports into browser memory. Closing/reloading clears them. Optional GitHub sign-in and PostgreSQL store aggregate summaries only after an explicit save. No disk-image uploads are enabled.
+Open the local URL printed by Next.js and visit `/dashboard`. Import a JSON report exported by the desktop or CLI. Reloading or closing the page clears browser-held reports. The browser cannot scan physical disks, and no disk-image upload is implemented. Public pages and local report viewing work without cloud credentials.
 
-## Prove a recovery on disposable data
+## Try a recovery with disposable data
+
+Run these commands from the repository root after installing the Python dependencies. The fixture generator creates a new directory and refuses to overwrite an existing one; use fresh paths when repeating the example.
 
 ```powershell
-python scripts/create_fixture.py artifacts/demo
-recoverx scan artifacts/demo/deleted-fat32.img --mode quick --db artifacts/demo.sqlite --report artifacts/fat32-report.json
-# Use the scan_id printed by the command:
-recoverx recover artifacts/demo/deleted-fat32.img SCAN_ID E:\Recovered --db artifacts/demo.sqlite
-pytest -q
+.\.venv\Scripts\python.exe scripts/create_fixture.py artifacts/quickstart
+$scan = .\.venv\Scripts\python.exe -m recoverx.cli scan artifacts/quickstart/deleted-fat32.img --mode quick --db artifacts/quickstart.sqlite --report artifacts/quickstart-report.json | ConvertFrom-Json
+New-Item -ItemType Directory -Path artifacts/quickstart-output
+.\.venv\Scripts\python.exe -m recoverx.cli recover artifacts/quickstart/deleted-fat32.img $scan.scan_id artifacts/quickstart-output --db artifacts/quickstart.sqlite --allow-image-disk
 ```
 
-For disposable image files only, `--allow-image-disk` explicitly permits output on the image's disk. It never overrides physical-device imaging protection. Reference hashes are in `artifacts/demo/expected.json`.
-
-## Supported scope
-
-| Area | Implemented behavior |
-|---|---|
-| Sources | Regular raw .img/.raw/.dd images; read-only Windows device imaging |
-| Partitions | Superfloppy, primary MBR, GPT with CRC validation; configurable 512/4096-byte sector size |
-| FAT32 | Active directory traversal, deleted 8.3 names; extract unallocated single-cluster files only |
-| exFAT | Root deleted entry sets, allocation bitmap checks, explicit contiguous or surviving FAT extents |
-| Carving | JPEG/PNG/BMP/WebP decoding, GIF structure/first frame, ZIP and Office member CRCs, limited PDF/RIFF/ISO-media/SQLite/7z structure |
-| Discovery only | TIFF, RAR, MKV, MP3, FLAC signatures remain unresolved |
-| Restoration | Bounded reads, normalized names, separate-disk checks, no overwrite, temporary output, atomic no-replace publication, SHA-256 re-read |
-| History | SQLite candidates, checkpoints, scan state, JSON reports |
-| Optional bridge | Explicit 10-minute token, exact HTTPS Origin and loopback Host, one scan's read-only results |
-
-**Cannot recover:** overwritten data, TRIM-discarded blocks, inaccessible encryption, or physically unreadable bytes. NTFS/ext4 metadata, nested exFAT directories, EWF/VHD/VHDX/QCOW containers and fragmented raw carving are not implemented/qualified. A raw signature is not a recovered file. See [LIMITATIONS](docs/LIMITATIONS.md).
-
-## Tests and builds
+This recovers the generated deleted JPEG as `artifacts/quickstart-output/_HOTO.JPG`. Compare its hash with the independently generated reference:
 
 ```powershell
-pytest -q
-ruff check src tests scripts
-ruff format --check src tests scripts
+$expected = Get-Content artifacts/quickstart/expected.json -Raw | ConvertFrom-Json
+$actual = (Get-FileHash artifacts/quickstart-output/_HOTO.JPG -Algorithm SHA256).Hash
+if ($actual -ne $expected.'_HOTO.JPG') { throw 'Recovered file does not match the reference' }
+```
+
+Import `artifacts/quickstart-report.json` into the web workspace to inspect the scan. The `--allow-image-disk` option is used here only because the source is a disposable generated image. It does not override physical-device imaging protection.
+
+For other CLI commands and options:
+
+```powershell
+.\.venv\Scripts\python.exe -m recoverx.cli --help
+.\.venv\Scripts\python.exe -m recoverx.cli scan --help
+.\.venv\Scripts\python.exe -m recoverx.cli recover --help
+```
+
+## Development and verification
+
+Run Python checks from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check src tests scripts
+.\.venv\Scripts\python.exe -m ruff format --check src tests scripts
+```
+
+Build and test the optional C++ matcher with CMake on your PATH:
+
+```powershell
 cmake -S packages/recovery-core -B build/native
 cmake --build build/native --config Release
 ctest --test-dir build/native -C Release --output-on-failure
-cd apps/web
-npm test
-npm run lint
-npm run typecheck
-npm run build
 ```
 
-Native signature matching is optional: the Python fallback is functional. A compatible C++20 toolchain and pybind11 are required to build the extension. Do not mix a MinGW ABI extension into an MSVC CPython installation.
+The engine works with the Python matcher fallback. Building the pybind11 extension is a separate optional step; its packaged integration is not yet qualified. Use a compiler ABI compatible with your Python installation.
 
-## Installers and deployment
+Run web checks from `apps/web`:
 
-`scripts/package-windows.ps1` builds a PyInstaller directory and, when Inno Setup is available, an installer with an uninstaller. Release artifacts must be qualified and signed before public distribution. The download page deliberately has no placeholder link.
+```powershell
+npm test
+npm run lint
+npm run build
+npm run typecheck
+npm audit --omit=dev --audit-level=high
+```
 
-Deploy **only `apps/web`** to Vercel. Configure GitHub OAuth and a private PostgreSQL database to enable account summaries. Copy the root `.env.example` to `apps/web/.env.local` for development. Apply `database/migrations/0000_foundation.sql` to an empty database before enabling cloud persistence. No secrets are included. See [DEPLOYMENT](docs/DEPLOYMENT.md) and the actual [verification report](docs/VERIFICATION.md).
+The recorded milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
+
+## Build the Windows installer
+
+After installing `.[desktop,dev]` into `.venv`, install Inno Setup 6 and make `ISCC.exe` discoverable, or set `RECOVERX_ISCC` to its full path. From the repository root:
+
+```powershell
+.\scripts\package-windows.ps1
+```
+
+Outputs:
+
+- `dist/RecoverX/RecoverX.exe` — application executable; keep the entire `dist/RecoverX` directory together.
+- `dist/installer/RecoverX-Setup-0.1.0.exe` — installer, when Inno Setup is available.
+
+A local unsigned installer was built and the packaged application passed its startup smoke test. Installation/uninstallation and clean-machine compatibility remain unqualified. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
+
+## Deploy the web application
+
+Configure Vercel with **`apps/web` as the project root**, the Next.js framework, Node 22, and `npm run build`. The native recovery engine does not run on Vercel.
+
+Cloud summaries additionally require a PostgreSQL database, the [initial migration](database/migrations/0000_foundation.sql), and these environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Private database connection |
+| `AUTH_SECRET` | Authentication secret |
+| `AUTH_GITHUB_ID` | GitHub OAuth client ID |
+| `AUTH_GITHUB_SECRET` | GitHub OAuth client secret |
+| `AUTH_URL` | Canonical application origin |
+
+For local cloud development, copy `.env.example` to `apps/web/.env.local` and supply your own values. Never commit credentials. Follow [DEPLOYMENT.md](docs/DEPLOYMENT.md) for the callback URL, migrations, and verification steps. Hosted authentication, owner isolation, save/delete operations, and production deployment still require live verification.
+
+## Repository layout
+
+```text
+apps/desktop/            Desktop entry point and Windows packaging
+apps/web/                Next.js website and report workspace
+src/recoverx/            Recovery engine, CLI, desktop UI, and local agent
+packages/recovery-core/  C++ signature matcher and native tests
+database/migrations/    PostgreSQL migrations
+tests/                   Generated-image and safety tests
+scripts/                 Fixture, verification, benchmark, and build tools
+docs/                    Architecture, usage, security, and verification records
+.github/workflows/       CI and manually triggered packaging
+```
 
 ## Documentation
 
-[Architecture](docs/ARCHITECTURE.md) · [Installation](docs/INSTALLATION.md) · [Development](docs/DEVELOPMENT.md) · [Engine](docs/RECOVERY_ENGINE.md) · [API](docs/API.md) · [Security](docs/SECURITY.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Limitations](docs/LIMITATIONS.md) · [Changelog](CHANGELOG.md)
+[Architecture](docs/ARCHITECTURE.md) · [Installation](docs/INSTALLATION.md) · [Development](docs/DEVELOPMENT.md) · [Recovery engine](docs/RECOVERY_ENGINE.md) · [API](docs/API.md) · [Security](docs/SECURITY.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Verification](docs/VERIFICATION.md) · [Limitations](docs/LIMITATIONS.md) · [Changelog](CHANGELOG.md)
+
+## License and dependencies
+
+A project license has not yet been selected. Do not assume an open-source license applies to RecoverX. Dependency notices and distribution review requirements are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
