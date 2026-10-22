@@ -18,7 +18,8 @@ This document records completed checks and unresolved release gates. It does not
 | Production npm audit | Zero reported advisories at verification time |
 | Full npm audit | Nine development-tool advisories: four moderate, five high; not silently forced to breaking versions |
 | Synthetic scan benchmark | 128 MiB zero-filled file in 1.905 s, 67.18 MiB/s; Python tracked allocation peak 2,119,526 bytes. Warm cache possible, not hardware recovery performance |
-| GitHub repository | Source pushed to private repository https://github.com/krishnacode120/RecoverX on main; web and native CI passed on initial push. Linux desktop smoke exposed a missing libEGL runtime, now installed explicitly by CI; rerun pending |
+| GitHub repository | Source pushed to private repository https://github.com/krishnacode120/RecoverX on main |
+| GitHub CI | [Run 39762643900](https://github.com/krishnacode120/RecoverX/actions/runs/39762643900) passed at commit `51218613ca706431ab91cd84841ae7e0c83fde2f`: Python tests and desktop startup on Windows and Linux, web tests/lint/build/typecheck/production audit, and native CMake/CTest. Packaging is a separate manual job and was not run by this push |
 
 ## Recovery evidence
 
@@ -40,6 +41,7 @@ PyInstaller built the portable application and Inno Setup 6.7.3 compiled an inst
 - The initial sandbox blocked localhost sockets and hard-link tests. The same generated tests passed with those permissions available; they were not skipped.
 - Turbopack failed to start its CSS transform child process on this host. The supported webpack production build succeeded.
 - GCC initially resolved incompatible runtime DLLs. Prepending its own UCRT64 runtime directory fixed the native build/test. Optional pybind11 extension packaging remains unqualified; the Python fallback is used.
+- The first GitHub Linux desktop smoke failed because libEGL was absent. Installing the Linux Qt runtime libraries fixed it; the rerun passed on both operating systems.
 - No physical user disk was opened or scanned. USB/hardware qualification is outstanding.
 - No Vercel authorization/project, GitHub OAuth client, database connection or code-signing certificate was supplied. No live deployment URL or signed release is claimed.
 - PostgreSQL migrations and authenticated owner-isolated endpoints are implemented but have not been exercised against a real hosted database.
