@@ -178,6 +178,9 @@ def test_empty_and_unsupported(tmp_path):
     store, scan_id = scan_image(path)
     assert store.count(scan_id) == 0
     path.write_bytes(b"\xeb\x52\x90NTFS    " + bytes(4096))
+    with pytest.raises(RecoveryError, match="Invalid NTFS boot sector"):
+        scan_image(path, "quick")
+    path.write_bytes(bytes(4096))
     with pytest.raises(RecoveryError, match="No supported"):
         scan_image(path, "quick")
 

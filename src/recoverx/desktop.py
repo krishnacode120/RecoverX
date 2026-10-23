@@ -4,8 +4,10 @@ from io import BytesIO
 import json
 from pathlib import Path
 import sys
+import sqlite3
+import uuid
 
-from PySide6.QtCore import QStandardPaths, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QInputDialog,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -30,7 +33,14 @@ from PySide6.QtWidgets import (
 from .engine import run_scan
 from .models import Control, RecoveryError
 from .restore import image_device, recover, write_json_exclusive
-from .source import ImageSource
+from .drives import (
+    DriveSelection,
+    list_drives,
+    memory_history,
+    open_source,
+    protect_drive_output,
+    protect_source_history,
+)
 from .store import Store, protect_history
 from .windows import WindowsRawSource, enumerate_devices
 
@@ -62,9 +72,8 @@ class Window(QMainWindow):
         super().__init__()
         self.setWindowTitle("RecoverX · Local recovery workspace")
         self.resize(1160, 790)
-        data = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
-        data.mkdir(parents=True, exist_ok=True)
-        self.db = str(data / "history.sqlite")
+        self.db = f"file:recoverx-{uuid.uuid4().hex}?mode=memory&cache=shared"
+        self._history_anchor = Store(self.db)
         self.source_path, self.scan_id, self.page = None, None, 0
         self.worker, self.control, self.items = None, Control(), []
         shell = QWidget()
@@ -73,7 +82,9 @@ class Window(QMainWindow):
         title = QLabel("RECOVERX    /    Your files. Your machine.")
         title.setStyleSheet("font-size: 24px; font-weight: 700; padding: 16px")
         layout.addWidget(title)
-        note = QLabel("Read-only analysis · No cloud account · Nothing uploaded · Build 0.1.0 (experimental)")
+        note = QLabel(
+            "Read-only analysis · No cloud account · Nothing uploaded · NTFS upgrade (experimental)"
+        )
         note.setStyleSheet("color: #8da9cb; padding: 0 16px 12px")
         layout.addWidget(note)
         self.tabs = QTabWidget()
@@ -117,12 +128,14 @@ class Window(QMainWindow):
         row = QHBoxLayout()
         choose = QPushButton("Open raw image")
         choose.clicked.connect(self.choose_image)
-        self.image_label = QLabel("No image selected")
+        choose_drive = QPushButton("Select Windows drive…")
+        choose_drive.clicked.connect(self.choose_drive)
+        self.image_label = QLabel("No source selected")
         self.mode = QComboBox()
-        self.mode.addItems(["deep", "quick"])
+        self.mode.addItems(["quick", "deep"])
         self.start = QPushButton("Start scan")
         self.start.clicked.connect(self.start_scan)
-        for widget in (choose, self.image_label, self.mode, self.start):
+        for widget in (choose, choose_drive, self.image_label, self.mode, self.start):
             row.addWidget(widget)
         box.addLayout(row)
         self.consent = QCheckBox(
@@ -154,7 +167,7 @@ class Window(QMainWindow):
         box.addWidget(self.details)
         box.addWidget(self.thumbnail)
         self.same_disk = QCheckBox(
-            "Allow output on the image file's disk (image files only; never raw device imaging)"
+            "Allow same-disk output for a disposable image file only (never a selected drive)"
         )
         box.addWidget(self.same_disk)
         row = QHBoxLayout()
@@ -194,6 +207,9 @@ class Window(QMainWindow):
         page, box = QWidget(), QVBoxLayout()
         page.setLayout(box)
         self.tabs.addTab(page, "History & resume")
+        choose_history = QPushButton("Choose folder for persistent history…")
+        choose_history.clicked.connect(self.choose_history)
+        box.addWidget(choose_history)
         self.history = QComboBox()
         box.addWidget(self.history)
         refresh, load, resume = (
@@ -208,7 +224,8 @@ class Window(QMainWindow):
             box.addWidget(w)
         box.addWidget(
             QLabel(
-                "History stores scan evidence locally. Reopen the matching image to preview or export files.\n"
+                "History starts in memory and is lost on exit unless you choose a persistent history folder.\n"
+                "For drive scans, history and output must be on another physical disk.\n"
                 "Deep scans resume from a committed block checkpoint. Quick scans restart."
             )
         )
@@ -219,18 +236,20 @@ class Window(QMainWindow):
         help_text = QTextEdit()
         help_text.setReadOnly(True)
         help_text.setPlainText(
-            "RecoverX 0.1.0\n\n"
+            "RecoverX NTFS upgrade\n\n"
             "1. Work from an image where possible. Never install or save onto media containing deleted files.\n"
-            "2. Select a raw image and consent. Deep scan finds file structures; quick scan reads FAT32/exFAT metadata.\n"
+            "2. Select a Windows drive or raw image and consent. Quick scan reads NTFS/FAT32/exFAT metadata.\n"
+            "   A live drive can change during scanning. Use an offline image for consistent evidence.\n"
             "3. Review evidence. A filename or signature is not proof of recoverable content.\n"
             "4. Select candidates and choose a different destination. Existing files are never replaced.\n"
             "5. Export a JSON report to view in the web dashboard. Reports contain names and offsets; review before sharing.\n\n"
             "Limits: FAT32 single-cluster deleted files; exFAT root files with provable extents; 32 MiB carving limit. "
-            "NTFS/ext4 metadata, EWF, virtual disk containers, encrypted volumes, and fragmented carving are not supported. "
+            "NTFS supports base-record resident/plain nonresident data; continuation, sparse, compressed, "
+            "and encrypted streams are unresolved. ext4, EWF, virtual disks and fragmented carving are unsupported. "
             "No recovery of overwritten or TRIM-discarded bytes. Hardware failures need specialist imaging.\n\n"
             "Previews show bounded metadata and image thumbnails only. Recovered scripts, macros and binaries never run.\n"
             "No local network listener starts with this application. No silent privilege elevation.\n\n"
-            "Storage: " + self.db
+            "History starts in memory; select an external folder to retain it."
         )
         self.tabs.addTab(help_text, "Guide & settings")
 
@@ -283,15 +302,77 @@ class Window(QMainWindow):
                 QMessageBox.warning(self, "Source conflict", str(exc))
                 return
             self.source_path = path
+            self.scan_id, self.items = None, []
+            self.table.setRowCount(0)
+            self.same_disk.setEnabled(True)
             self.image_label.setText(Path(path).name)
             self.consent.setChecked(False)
+
+    def choose_drive(self):
+        if self.busy():
+            return
+
+        def finished(drives):
+            if not drives:
+                QMessageBox.information(self, "No drives", "No supported Windows drive mappings were found.")
+                return
+            labels = [drive.label for drive in drives]
+            label, accepted = QInputDialog.getItem(
+                self, "Select source drive", "Drive to read:", labels, 0, False
+            )
+            if not accepted:
+                return
+            drive = drives[labels.index(label)]
+            try:
+                if not memory_history(self.db):
+                    protect_drive_output(drive, Path(self.db).parent)
+            except RecoveryError as exc:
+                QMessageBox.warning(self, "History destination", str(exc))
+                return
+            self.source_path, self.scan_id, self.items = drive, None, []
+            self.table.setRowCount(0)
+            self.image_label.setText(drive.label)
+            self.mode.setCurrentText("quick")
+            self.consent.setChecked(False)
+            self.same_disk.setChecked(False)
+            self.same_disk.setEnabled(False)
+            self.phase.setText(
+                "Drive selected. Consent and start to open it read-only; administrator rights may be needed."
+            )
+
+        self.execute(lambda *_: list_drives(), finished)
+
+    def choose_history(self):
+        if self.busy():
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, "History folder (another physical disk for drive scans)"
+        )
+        if not folder:
+            return
+        target = str(Path(folder) / "recoverx-history.sqlite")
+        try:
+            if isinstance(self.source_path, DriveSelection):
+                protect_drive_output(self.source_path, folder)
+            elif self.source_path:
+                protect_history(self.source_path, target)
+            anchor = Store(target)
+        except (RecoveryError, OSError, sqlite3.Error) as exc:
+            QMessageBox.warning(self, "History folder", str(exc))
+            return
+        self._history_anchor.close()
+        self._history_anchor, self.db = anchor, target
+        self.scan_id, self.items = None, []
+        self.table.setRowCount(0)
+        self.refresh_history()
+        self.phase.setText(f"Persistent history: {target}. Previous in-memory results are not copied.")
 
     def start_scan(self, checked=False, resume=False):
         if self.busy():
             return
         if not self.source_path or not self.consent.isChecked():
             QMessageBox.information(
-                self, "Select and authorize", "Choose an image and check the authorization box first."
+                self, "Select and authorize", "Choose a drive or image and check the authorization box first."
             )
             return
         path, mode, db = self.source_path, self.mode.currentText(), self.db
@@ -300,12 +381,13 @@ class Window(QMainWindow):
             mode = "deep"
 
         def operation(control, progress):
-            store = Store(db)
-            try:
-                with ImageSource(path) as source:
+            with open_source(path) as source:
+                protect_source_history(source, db)
+                store = Store(db)
+                try:
                     return run_scan(source, store, mode, control, progress, resume_id)
-            finally:
-                store.close()
+                finally:
+                    store.close()
 
         self.execute(operation, self.scan_finished)
 
@@ -369,7 +451,7 @@ class Window(QMainWindow):
         try:
             from PIL import Image
 
-            with ImageSource(self.source_path) as source:
+            with open_source(self.source_path) as source:
                 self.assert_source(source)
                 content = b"".join(source.read(e.offset, e.length) for e in item.extents)
             with Image.open(BytesIO(content)) as image:
@@ -410,20 +492,21 @@ class Window(QMainWindow):
 
         def operation(control, progress):
             outcomes = []
-            store = Store(db)
-            try:
-                with ImageSource(path) as source:
+            with open_source(path) as source:
+                protect_source_history(source, db)
+                store = Store(db)
+                try:
                     if json.loads(store.get(scan_id)["source_identity"]) != source.identity:
-                        raise RecoveryError("Selected image does not match the scan")
+                        raise RecoveryError("Selected source does not match the scan")
                     for item in selected:
                         control.check()
                         try:
                             outcomes.append(recover(source, item, destination, control, progress, allow))
                         except RecoveryError as exc:
                             outcomes.append({"filename": item.name, "status": "failed", "error": str(exc)})
-                return outcomes
-            finally:
-                store.close()
+                    return outcomes
+                finally:
+                    store.close()
 
         self.execute(operation, lambda outcomes: self.details.setPlainText(json.dumps(outcomes, indent=2)))
 
@@ -434,6 +517,12 @@ class Window(QMainWindow):
             self, "Export report (contains filenames)", "recoverx-report.json", "JSON (*.json)"
         )
         if target:
+            try:
+                if isinstance(self.source_path, DriveSelection):
+                    protect_drive_output(self.source_path, Path(target).parent)
+            except RecoveryError as exc:
+                QMessageBox.warning(self, "Report destination", str(exc))
+                return
             store = Store(self.db)
             try:
                 write_json_exclusive(target, store.report(self.scan_id))
@@ -495,6 +584,7 @@ class Window(QMainWindow):
             self.phase.setText("Cancelling safely. Close again after the worker stops.")
             event.ignore()
         else:
+            self._history_anchor.close()
             event.accept()
 
 

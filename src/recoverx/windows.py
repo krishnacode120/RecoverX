@@ -23,7 +23,7 @@ def enumerate_devices():
         [pscustomobject]@{number=$part.PartitionNumber; offset=$part.Offset; size=$part.Size;
           mount=$part.DriveLetter; filesystem=$(if ($vol) { $vol.FileSystemType.ToString() } else { $null })}
       })
-      [pscustomobject]@{number=$disk.Number; name=$disk.FriendlyName; size=$disk.Size;
+      [pscustomobject]@{number=$disk.Number; name=$disk.FriendlyName; serial=$disk.SerialNumber; size=$disk.Size;
         sector_size=$disk.LogicalSectorSize; bus=$disk.BusType.ToString();
         read_only=$disk.IsReadOnly; partitions=$parts}
     }) | ConvertTo-Json -Depth 6 -Compress

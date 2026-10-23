@@ -20,7 +20,7 @@ def detect(source, sector_size=512):
         return []
     boot = source.read(0, 512)
     # A filesystem boot record is not a partition table.
-    if boot[3:11] == b"EXFAT   " or boot[82:90] == b"FAT32   ":
+    if boot[3:11] in (b"EXFAT   ", b"NTFS    ") or boot[82:90] == b"FAT32   ":
         return [Partition(0, source.size, "superfloppy", "Volume")]
     if boot[510:512] != b"\x55\xaa":
         return []

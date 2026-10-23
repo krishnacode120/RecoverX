@@ -6,9 +6,12 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from .models import Candidate, RecoveryError
+from .drives import memory_history
 
 
 def protect_history(source_path, db_path):
+    if memory_history(db_path):
+        return
     source, db = Path(source_path).resolve(), Path(db_path).resolve()
     if source == db or (source.exists() and db.exists() and os.path.samefile(source, db)):
         raise RecoveryError("History database cannot be the source image or a hard link to it")
@@ -16,7 +19,7 @@ def protect_history(source_path, db_path):
 
 class Store:
     def __init__(self, path):
-        self.db = sqlite3.connect(path)
+        self.db = sqlite3.connect(path, uri=memory_history(path))
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS scans (

@@ -5,6 +5,7 @@ permissions:
 jobs:
   python:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -16,10 +17,13 @@ jobs:
       - run: pip install -e ".[desktop,dev]"
       - name: Install Linux Qt runtime
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 ntfs-3g
       - run: ruff check src tests scripts
-      - run: ruff format --check src tests scripts
+      - run: ruff format --check --diff src tests scripts
       - run: pytest -q --junitxml=artifacts/python-tests.xml
+        env:
+          QT_QPA_PLATFORM: offscreen
+          RECOVERX_REQUIRE_NTFS_TOOLS: '1'
       - run: python -m recoverx.desktop --smoke-test
         env:
           QT_QPA_PLATFORM: offscreen
@@ -56,7 +60,7 @@ jobs:
       - run: cmake --build build/native --config Release
       - run: ctest --test-dir build/native -C Release --output-on-failure
   package:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: [python, web, native]
     runs-on: windows-latest
     steps:
@@ -68,7 +72,23 @@ jobs:
       - run: .venv/Scripts/python -m pip install -e ".[desktop,dev]"
       - run: choco install innosetup --no-progress -y
       - run: ./scripts/package-windows.ps1
+      - name: Verify packaged startup
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $app = Start-Process -FilePath ./dist/RecoverX/RecoverX.exe -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
+          if (-not $app.WaitForExit(30000)) { $app.Kill(); throw 'Packaged startup timed out' }
+          if ($app.ExitCode -ne 0) { throw "Packaged startup failed: $($app.ExitCode)" }
+      - name: Archive portable application and checksums
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./dist/RecoverX -DestinationPath ./dist/RecoverX-Portable-0.2.0.zip
+          Get-FileHash ./dist/RecoverX-Portable-0.2.0.zip, ./dist/installer/RecoverX-Setup-0.2.0.exe -Algorithm SHA256 | Format-List | Out-File ./dist/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-installer-for-validation
-          path: dist/installer/*
+          path: |
+            dist/installer/*
+            dist/RecoverX-Portable-0.2.0.zip
+            dist/SHA256.txt
