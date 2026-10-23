@@ -8,7 +8,7 @@ def resident(kind, content, flags=0):
     data = bytearray(length)
     struct.pack_into("<IIBBHHH", data, 0, kind, length, 0, 0, 0, flags, 0)
     struct.pack_into("<IH", data, 16, len(content), 24)
-    data[24:24 + len(content)] = content
+    data[24 : 24 + len(content)] = content
     return bytes(data)
 
 
@@ -24,7 +24,7 @@ def nonresident(kind, runs, size, flags=0):
     struct.pack_into("<IIBBHHH", result, 0, kind, len(result), 1, 0, 0, flags, 0)
     struct.pack_into("<QQH", result, 16, 0, count - 1, 64)
     struct.pack_into("<QQQ", result, 40, count * 1024, size, size)
-    result[64:64 + len(pairs)] = pairs
+    result[64 : 64 + len(pairs)] = pairs
     return bytes(result)
 
 
@@ -42,7 +42,7 @@ def record(attrs, number, active=False, directory=False):
     struct.pack_into("<HHHH", data, 16, 1, 1, 56, int(active) | (2 if directory else 0))
     pos = 56
     for attr in attrs:
-        data[pos:pos + len(attr)] = attr
+        data[pos : pos + len(attr)] = attr
         pos += len(attr)
     struct.pack_into("<I", data, pos, 0xFFFFFFFF)
     struct.pack_into("<II", data, 24, pos + 8, 1024)
@@ -50,8 +50,8 @@ def record(attrs, number, active=False, directory=False):
     data[48:50] = b"\xaa\xbb"
     for i in (1, 2):
         end = i * 512 - 2
-        data[48 + i * 2:50 + i * 2] = data[end:end + 2]
-        data[end:end + 2] = data[48:50]
+        data[48 + i * 2 : 50 + i * 2] = data[end : end + 2]
+        data[end : end + 2] = data[48:50]
     return bytes(data)
 
 
@@ -71,7 +71,7 @@ def make_ntfs(path):
     for start, length in mft_runs + [(0, 4), (80, 1), (140, 1)]:
         for n in range(start, start + length):
             bitmap[n // 8] |= 1 << (n % 8)
-    image[80 * cluster:80 * cluster + len(bitmap)] = bitmap
+    image[80 * cluster : 80 * cluster + len(bitmap)] = bitmap
     records = {
         0: record([nonresident(0x80, mft_runs, 32 * 1024), resident(0xB0, record_bits)], 0, True),
         3: record([resident(0x70, bytes(8) + b"\x03\x01\x00\x00")], 3, True),
@@ -80,9 +80,11 @@ def make_ntfs(path):
     small = (b"Resident content crossing a fixup boundary.\r\n" * 15)[:600]
     large = bytes((n * 13 + 7) % 256 for n in range(2300))
     records[16] = record([filename("deleted-note.txt"), resident(0x80, small)], 16)
-    records[17] = record([filename("fragmented.bin"), nonresident(0x80, [(120, 1), (100, 2)], len(large))], 17)
-    image[120 * cluster:121 * cluster] = large[:cluster]
-    image[100 * cluster:100 * cluster + len(large) - cluster] = large[cluster:]
+    records[17] = record(
+        [filename("fragmented.bin"), nonresident(0x80, [(120, 1), (100, 2)], len(large))], 17
+    )
+    image[120 * cluster : 121 * cluster] = large[:cluster]
+    image[100 * cluster : 100 * cluster + len(large) - cluster] = large[cluster:]
     records[18] = record([filename("reused.bin"), nonresident(0x80, [(140, 1)], 100)], 18)
     torn = bytearray(record([filename("torn.txt"), resident(0x80, b"Do not export")], 19))
     torn[510:512] = b"XX"
@@ -97,7 +99,7 @@ def make_ntfs(path):
     offsets = {}
     for number, content in records.items():
         offset = (4 + number if number < 16 else 32 + number - 16) * cluster
-        image[offset:offset + 1024] = content
+        image[offset : offset + 1024] = content
         offsets[number] = offset
     path.write_bytes(image)
     return {"deleted-note.txt": small, "fragmented.bin": large, "empty.txt": b""}, offsets

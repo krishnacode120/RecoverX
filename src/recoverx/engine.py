@@ -126,7 +126,9 @@ def run_scan(source, store, mode="deep", control=None, progress=no_progress, res
                         candidate.sha256 = candidate_hash(source, candidate, control)
                     store.save(scan_id, candidate)
             if not supported:
-                raise RecoveryError("No supported NTFS/FAT32/exFAT filesystem found; deep scan remains available")
+                raise RecoveryError(
+                    "No supported NTFS/FAT32/exFAT filesystem found; deep scan remains available"
+                )
         control.check()
         source.assert_unchanged()
         store.checkpoint(scan_id, source.size, "complete")

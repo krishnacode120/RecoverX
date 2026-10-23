@@ -54,7 +54,9 @@ def test_bad_ntfs_geometry_rejected(tmp_path, field, value):
         NTFS(source, Partition(0, source.size, "raw", "test"))
 
 
-@pytest.mark.parametrize("mutation", ["truncated", "missing_end", "out_of_bounds", "sparse", "overlap", "uninitialized"])
+@pytest.mark.parametrize(
+    "mutation", ["truncated", "missing_end", "out_of_bounds", "sparse", "overlap", "uninitialized"]
+)
 def test_bad_mapping_pairs_rejected(mutation):
     raw = bytearray(nonresident(0x80, [(100, 1), (120, 1)], 1500))
     if mutation == "truncated":
@@ -77,15 +79,18 @@ def test_mft_bitmap_disagreement_blocks_resident_export(tmp_path):
     path = tmp_path / "ntfs.img"
     _, offsets = make_ntfs(path)
     from recoverx.ntfs import attributes
+
     raw = path.read_bytes()
-    attrs = list(attributes(fix_record(raw[offsets[0]:offsets[0] + 1024])))
+    attrs = list(attributes(fix_record(raw[offsets[0] : offsets[0] + 1024])))
     bitmap = next(a for a in attrs if a.kind == 0xB0)
     byte = offsets[0] + bitmap.offset + 24 + 16 // 8
     with path.open("r+b") as image:
         image.seek(byte)
         image.write(b"\x21")
     with ImageSource(path) as source:
-        candidates = list(NTFS(source, Partition(0, source.size, "raw", "test")).deleted(Control(), lambda *_: None))
+        candidates = list(
+            NTFS(source, Partition(0, source.size, "raw", "test")).deleted(Control(), lambda *_: None)
+        )
     candidate = next(c for c in candidates if c.name == "deleted-note.txt")
     assert candidate.status == Status.UNCERTAIN
     assert any("bitmap" in reason for reason in candidate.reasons)

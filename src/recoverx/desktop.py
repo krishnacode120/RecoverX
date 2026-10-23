@@ -34,8 +34,12 @@ from .engine import run_scan
 from .models import Control, RecoveryError
 from .restore import image_device, recover, write_json_exclusive
 from .drives import (
-    DriveSelection, list_drives, memory_history, open_source,
-    protect_drive_output, protect_source_history,
+    DriveSelection,
+    list_drives,
+    memory_history,
+    open_source,
+    protect_drive_output,
+    protect_source_history,
 )
 from .store import Store, protect_history
 from .windows import WindowsRawSource, enumerate_devices
@@ -78,7 +82,9 @@ class Window(QMainWindow):
         title = QLabel("RECOVERX    /    Your files. Your machine.")
         title.setStyleSheet("font-size: 24px; font-weight: 700; padding: 16px")
         layout.addWidget(title)
-        note = QLabel("Read-only analysis · No cloud account · Nothing uploaded · NTFS upgrade (experimental)")
+        note = QLabel(
+            "Read-only analysis · No cloud account · Nothing uploaded · NTFS upgrade (experimental)"
+        )
         note.setStyleSheet("color: #8da9cb; padding: 0 16px 12px")
         layout.addWidget(note)
         self.tabs = QTabWidget()
@@ -238,7 +244,7 @@ class Window(QMainWindow):
             "4. Select candidates and choose a different destination. Existing files are never replaced.\n"
             "5. Export a JSON report to view in the web dashboard. Reports contain names and offsets; review before sharing.\n\n"
             "Limits: FAT32 single-cluster deleted files; exFAT root files with provable extents; 32 MiB carving limit. "
-             "NTFS supports base-record resident/plain nonresident data; continuation, sparse, compressed, "
+            "NTFS supports base-record resident/plain nonresident data; continuation, sparse, compressed, "
             "and encrypted streams are unresolved. ext4, EWF, virtual disks and fragmented carving are unsupported. "
             "No recovery of overwritten or TRIM-discarded bytes. Hardware failures need specialist imaging.\n\n"
             "Previews show bounded metadata and image thumbnails only. Recovered scripts, macros and binaries never run.\n"
@@ -311,7 +317,9 @@ class Window(QMainWindow):
                 QMessageBox.information(self, "No drives", "No supported Windows drive mappings were found.")
                 return
             labels = [drive.label for drive in drives]
-            label, accepted = QInputDialog.getItem(self, "Select source drive", "Drive to read:", labels, 0, False)
+            label, accepted = QInputDialog.getItem(
+                self, "Select source drive", "Drive to read:", labels, 0, False
+            )
             if not accepted:
                 return
             drive = drives[labels.index(label)]
@@ -328,14 +336,18 @@ class Window(QMainWindow):
             self.consent.setChecked(False)
             self.same_disk.setChecked(False)
             self.same_disk.setEnabled(False)
-            self.phase.setText("Drive selected. Consent and start to open it read-only; administrator rights may be needed.")
+            self.phase.setText(
+                "Drive selected. Consent and start to open it read-only; administrator rights may be needed."
+            )
 
         self.execute(lambda *_: list_drives(), finished)
 
     def choose_history(self):
         if self.busy():
             return
-        folder = QFileDialog.getExistingDirectory(self, "History folder (another physical disk for drive scans)")
+        folder = QFileDialog.getExistingDirectory(
+            self, "History folder (another physical disk for drive scans)"
+        )
         if not folder:
             return
         target = str(Path(folder) / "recoverx-history.sqlite")

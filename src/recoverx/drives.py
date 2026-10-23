@@ -38,11 +38,19 @@ def list_drives():
             letter = str(part.get("mount") or "").upper()
             if not re.fullmatch("[A-Z]", letter):
                 continue
-            result.append(DriveSelection(
-                letter, int(disk["number"]), int(disk["size"]), int(disk["sector_size"]),
-                int(part["offset"]), int(part["size"]), str(disk["name"]),
-                str(disk.get("serial") or ""), str(part.get("filesystem") or "Unknown"),
-            ))
+            result.append(
+                DriveSelection(
+                    letter,
+                    int(disk["number"]),
+                    int(disk["size"]),
+                    int(disk["sector_size"]),
+                    int(part["offset"]),
+                    int(part["size"]),
+                    str(disk["name"]),
+                    str(disk.get("serial") or ""),
+                    str(part.get("filesystem") or "Unknown"),
+                )
+            )
     return result
 
 
@@ -118,7 +126,7 @@ class DriveSource:
             start = physical // sector * sector
             finish = ((physical + take + sector - 1) // sector) * sector
             data = self.raw.read(start, finish - start)
-            result.extend(data[physical - start:physical - start + take])
+            result.extend(data[physical - start : physical - start + take])
             offset += take
             length -= take
         return bytes(result)

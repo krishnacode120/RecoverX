@@ -18,10 +18,10 @@ def test_desktop_starts_in_memory_and_selects_drive_without_opening_it(monkeypat
     assert list(tmp_path.iterdir()) == []
     drive = DriveSelection("C", 99, 8192, 512, 1024, 4096, "Mock disk", "TEST", "NTFS")
     monkeypatch.setattr("recoverx.desktop.list_drives", lambda: [drive])
-    monkeypatch.setattr("recoverx.desktop.open_source", lambda *_: (_ for _ in ()).throw(AssertionError("Opened")))
     monkeypatch.setattr(
-        "recoverx.desktop.QInputDialog.getItem", lambda *args: (drive.label, True)
+        "recoverx.desktop.open_source", lambda *_: (_ for _ in ()).throw(AssertionError("Opened"))
     )
+    monkeypatch.setattr("recoverx.desktop.QInputDialog.getItem", lambda *args: (drive.label, True))
     monkeypatch.setattr(window, "execute", lambda operation, finished: finished(operation(None, None)))
     window.choose_drive()
     assert window.source_path == drive

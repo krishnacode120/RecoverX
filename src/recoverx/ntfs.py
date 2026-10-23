@@ -35,13 +35,13 @@ def fix_record(raw):
     usa, count = u16(raw, 4), u16(raw, 6)
     if count != len(raw) // STRIDE + 1 or usa < 42 or usa + count * 2 > STRIDE - 2:
         raise RecoveryError("Invalid NTFS update sequence array")
-    marker = raw[usa:usa + 2]
+    marker = raw[usa : usa + 2]
     fixed = bytearray(raw)
     for i in range(1, count):
         tail = i * STRIDE - 2
-        if raw[tail:tail + 2] != marker:
+        if raw[tail : tail + 2] != marker:
             raise RecoveryError("NTFS record has a torn-write fixup mismatch")
-        fixed[tail:tail + 2] = raw[usa + i * 2:usa + i * 2 + 2]
+        fixed[tail : tail + 2] = raw[usa + i * 2 : usa + i * 2 + 2]
     used, allocated, first = u32(fixed, 24), u32(fixed, 28), u16(fixed, 20)
     if allocated != len(raw) or not 48 <= first <= used <= allocated or first % 8:
         raise RecoveryError("Invalid NTFS record bounds")
@@ -76,7 +76,7 @@ class Attribute:
         if self.nonresident:
             raise RecoveryError("Expected resident NTFS attribute")
         start, size = u16(self.raw, 20), u32(self.raw, 16)
-        return self.raw[start:start + size]
+        return self.raw[start : start + size]
 
 
 def attributes(record):
@@ -90,7 +90,7 @@ def attributes(record):
         length = u32(record, offset + 4)
         if length < 24 or length % 8 or offset + length > end:
             raise RecoveryError("Invalid NTFS attribute length")
-        raw = record[offset:offset + length]
+        raw = record[offset : offset + length]
         form, names = raw[8], raw[9]
         minimum = 64 if form == 1 else 24
         if form not in (0, 1) or length < minimum:
@@ -134,9 +134,9 @@ def decode_runs(attr, clusters, cluster_size, volume_offset):
             raise RecoveryError("Sparse or invalid NTFS mapping pair")
         if pos + length_bytes + delta_bytes > len(attr.raw):
             raise RecoveryError("Truncated NTFS runlist")
-        count = int.from_bytes(attr.raw[pos:pos + length_bytes], "little")
+        count = int.from_bytes(attr.raw[pos : pos + length_bytes], "little")
         pos += length_bytes
-        lcn += int.from_bytes(attr.raw[pos:pos + delta_bytes], "little", signed=True)
+        lcn += int.from_bytes(attr.raw[pos : pos + delta_bytes], "little", signed=True)
         pos += delta_bytes
         if not count or lcn < 0 or lcn + count > clusters or vcn + count > high + 1:
             raise RecoveryError("NTFS data run outside volume or VCN bounds")
@@ -304,7 +304,7 @@ class NTFS:
             namespace = value[65]
             if namespace > 3:
                 raise RecoveryError("Invalid NTFS filename namespace")
-            name = value[66:66 + value[64] * 2].decode("utf-16-le", errors="strict")
+            name = value[66 : 66 + value[64] * 2].decode("utf-16-le", errors="strict")
             names.append((namespace == 2, name))
         return sorted(names)[0][1] if names else f"ntfs-record-{number}.bin"
 
@@ -318,8 +318,13 @@ class NTFS:
             if raw[:4] != b"FILE" or u16(raw, 22) & 3:
                 continue
             candidate = Candidate(
-                f"ntfs-record-{number}.bin", "bin", 0, [], "NTFS deleted record",
-                Status.UNCERTAIN, [f"NTFS MFT record {number}"],
+                f"ntfs-record-{number}.bin",
+                "bin",
+                0,
+                [],
+                "NTFS deleted record",
+                Status.UNCERTAIN,
+                [f"NTFS MFT record {number}"],
             )
             try:
                 record = fix_record(raw)
@@ -345,11 +350,13 @@ class NTFS:
                                 raise RecoveryError("Deleted file clusters have been reallocated")
                 candidate.extents = stream.slices(0, stream.size)
                 candidate.status = Status.LIKELY
-                candidate.reasons.extend([
-                    "Surviving unnamed data stream and allocation checks passed",
-                    "Original filename when preserved; directory hierarchy is not reconstructed",
-                    "Current bytes may differ from the original; SSD TRIM cannot be reversed",
-                ])
+                candidate.reasons.extend(
+                    [
+                        "Surviving unnamed data stream and allocation checks passed",
+                        "Original filename when preserved; directory hierarchy is not reconstructed",
+                        "Current bytes may differ from the original; SSD TRIM cannot be reversed",
+                    ]
+                )
             except (RecoveryError, UnicodeError) as exc:
                 candidate.extents = []
                 candidate.status = Status.UNCERTAIN

@@ -29,7 +29,7 @@ def raw_mock(monkeypatch, selected):
             assert offset % 512 == 0 and length % 512 == 0
             assert 1024 <= offset <= offset + length <= 5120
             self.calls.append((offset, length))
-            return bytes(self.content[offset:offset + length])
+            return bytes(self.content[offset : offset + length])
 
         def close(self):
             self.closed = True
@@ -104,13 +104,23 @@ def test_cli_blocks_source_disk_database_before_device_open(selected, monkeypatc
 
 
 def test_drive_discovery_only_lists_real_mounted_partitions(monkeypatch):
-    monkeypatch.setattr(drives, "enumerate_devices", lambda: [{
-        "number": 99, "name": "test", "serial": "S", "size": 8192, "sector_size": 512,
-        "partitions": [
-            {"mount": "C", "offset": 1024, "size": 4096, "filesystem": "NTFS"},
-            {"mount": None, "offset": 0, "size": 512},
+    monkeypatch.setattr(
+        drives,
+        "enumerate_devices",
+        lambda: [
+            {
+                "number": 99,
+                "name": "test",
+                "serial": "S",
+                "size": 8192,
+                "sector_size": 512,
+                "partitions": [
+                    {"mount": "C", "offset": 1024, "size": 4096, "filesystem": "NTFS"},
+                    {"mount": None, "offset": 0, "size": 512},
+                ],
+            }
         ],
-    }])
+    )
     assert [d.letter for d in drives.list_drives()] == ["C"]
     with pytest.raises(RecoveryError):
         drives.select_drive(r"C:\Windows")

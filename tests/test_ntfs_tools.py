@@ -36,8 +36,9 @@ def test_independently_formatted_ntfs(tmp_path, length):
     original = bytes((i * 23 + 41) % 256 for i in range(length))
     content = tmp_path / "reference.bin"
     content.write_bytes(original)
-    subprocess.run([ntfscp, str(image), str(content), "/recover-me.bin"], check=True,
-                   capture_output=True, timeout=60)
+    subprocess.run(
+        [ntfscp, str(image), str(content), "/recover-me.bin"], check=True, capture_output=True, timeout=60
+    )
 
     # Mark only the known test file's record and storage as free. Do not mount a
     # volume or invoke repair tools, and never accept a device path as input.
@@ -46,6 +47,8 @@ def test_independently_formatted_ntfs(tmp_path, length):
         fs = NTFS(source, Partition(0, source.size, "test", "independent"))
         found = []
         for index in range(16, fs.mft.size // fs.record_size):
+            if fs.mft.read(index * fs.record_size, 4) != b"FILE":
+                continue
             record = fs._record(index)
             attrs = list(attributes(record))
             if fs._filename(attrs, index) == "recover-me.bin":
