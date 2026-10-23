@@ -2,18 +2,18 @@
 
 [![Verify RecoverX](https://github.com/krishnacode120/RecoverX/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/krishnacode120/RecoverX/actions/workflows/ci.yml)
 
-**Local disk-image recovery with a Windows desktop application and a web report workspace.**
+**Local Windows-drive and disk-image recovery with a desktop application and a web report workspace.**
 
-RecoverX scans raw disk images for deleted filesystem entries and recognizable file content, records the evidence for each candidate, and verifies exported bytes with SHA-256. Storage analysis runs locally. The Next.js website displays imported reports and can optionally store account summaries.
+RecoverX scans explicitly selected Windows drives and raw disk images for deleted filesystem entries and recognizable file content, records the evidence for each candidate, and verifies exported bytes with SHA-256. Storage analysis runs locally. The Next.js website displays imported reports and can optionally store account summaries.
 
-**Status: 0.1.0 — tested development milestone.** The core works against generated disk images, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [verification record](docs/VERIFICATION.md) for completed checks.
+**Status: 0.2.0 development upgrade — NTFS and Windows drive selection.** The core works against generated disk images, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [verification record](docs/VERIFICATION.md) for completed checks.
 
 ## What works
 
 | Component | Implemented scope |
 | --- | --- |
 | Image analysis | Read-only raw `.img`, `.raw`, and `.dd` files; superfloppy, primary MBR, and CRC-validated GPT layouts; 512/4096-byte sector sizes |
-| Quick scan | Conservative FAT32 and exFAT deleted-entry analysis within the limits below |
+| Quick scan | Conservative NTFS, FAT32, and exFAT deleted-entry analysis within the limits below |
 | Deep scan | Streaming signature discovery, bounded contiguous carving, format validation, progress, cancellation, and persisted resume checkpoints |
 | Export | Destination checks, normalized filenames, no overwrite, temporary output, atomic publication, and SHA-256 verification after writing |
 | Desktop | PySide6 interface for scanning, pause/cancel, paginated results, image thumbnails, selection/export, local history, reports, and Windows device imaging |
@@ -23,12 +23,14 @@ RecoverX scans raw disk images for deleted filesystem entries and recognizable f
 
 ### Filesystem and format coverage
 
+- **NTFS 3.0/3.1:** deleted base records, surviving Unicode names, resident files, and plain fragmented nonresident streams with allocation checks. [Scope and workflow](docs/NTFS.md).
+
 - **FAT32:** traverses active directories and discovers deleted short-name entries. Extraction is limited to unallocated, single-cluster files.
 - **exFAT:** analyzes deleted entry sets in the root directory, checks allocation state, and uses explicit contiguous extents or surviving FAT chains.
 - **Carving and validation:** JPEG, PNG, BMP, WebP, GIF, ZIP/Office archives, PDF, WAV/AVI, MP4/MOV, SQLite, and 7z have varying levels of decoding or structural validation. These checks do not establish complete semantic integrity for every format.
 - **Discovery only:** TIFF, RAR, MKV, MP3, and FLAC signatures are reported as unresolved; signature detection alone does not make a file exportable.
 
-NTFS/ext4 metadata recovery, nested exFAT directories, FAT32 long-name reconstruction, EWF/VHD/VHDX/QCOW containers, and fragmented raw carving are not implemented. Contiguous carving is capped at 32 MiB. The optional TSK dependency does not enable a working TSK adapter. See [all limitations](docs/LIMITATIONS.md).
+NTFS continuation/sparse/compressed/encrypted streams, ext4 metadata recovery, nested exFAT directories, FAT32 long-name reconstruction, EWF/VHD/VHDX/QCOW containers, and fragmented raw carving are not implemented. Contiguous carving is capped at 32 MiB. The optional TSK dependency does not enable a working TSK adapter. See [all limitations](docs/LIMITATIONS.md).
 
 ## Data handling and recovery limits
 
@@ -63,7 +65,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m recoverx.desktop
 ```
 
-Ordinary image-file scans do not require administrator rights. Windows physical-device imaging may require an explicitly elevated session; RecoverX does not elevate itself. See [installation and device imaging](docs/INSTALLATION.md).
+Click **Select Windows drive…** to choose a drive, or **Open raw image** for an image file. Select **quick** for NTFS/FAT32/exFAT metadata recovery, authorize the source, and start. History begins in memory; choose an external history folder to keep future scans after exit. Drive scans, persistent history, and export rules are explained in [NTFS and drive recovery](docs/NTFS.md).
+
+Ordinary image-file scans do not require administrator rights. Direct drive reading and physical-device imaging may require an explicitly elevated session; RecoverX does not elevate itself. Recovery output must be on another physical disk. See [installation and device imaging](docs/INSTALLATION.md).
 
 For a CLI-only environment, install `.[dev]` instead. On Linux, use `.venv/bin/python`; Qt desktop smoke tests additionally need platform runtime libraries, including `libegl1` and `libopengl0` on Ubuntu.
 
@@ -138,7 +142,7 @@ npm run typecheck
 npm audit --omit=dev --audit-level=high
 ```
 
-The recorded milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
+The original 0.1.0 milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. The 0.2.0 upgrade adds NTFS, drive-reader, and desktop safety tests; see the PR checks for its current validation status. Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
 
 ## Build the Windows installer
 
@@ -151,9 +155,9 @@ After installing `.[desktop,dev]` into `.venv`, install Inno Setup 6 and make `I
 Outputs:
 
 - `dist/RecoverX/RecoverX.exe` — application executable; keep the entire `dist/RecoverX` directory together.
-- `dist/installer/RecoverX-Setup-0.1.0.exe` — installer, when Inno Setup is available.
+- `dist/installer/RecoverX-Setup-0.2.0.exe` — installer, when Inno Setup is available.
 
-A local unsigned installer was built and the packaged application passed its startup smoke test. Installation/uninstallation and clean-machine compatibility remain unqualified. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
+The 0.1.0 local unsigned package passed startup testing. For 0.2.0, pull-request CI builds an unsigned installer and portable archive and tests packaged startup on the GitHub Windows runner; inspect the run's actual result before using its artifacts. Installation/uninstallation and clean-machine compatibility remain unqualified. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
 
 ## Deploy the web application
 
@@ -187,7 +191,7 @@ docs/                    Architecture, usage, security, and verification records
 
 ## Documentation
 
-[Architecture](docs/ARCHITECTURE.md) · [Installation](docs/INSTALLATION.md) · [Development](docs/DEVELOPMENT.md) · [Recovery engine](docs/RECOVERY_ENGINE.md) · [API](docs/API.md) · [Security](docs/SECURITY.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Verification](docs/VERIFICATION.md) · [Limitations](docs/LIMITATIONS.md) · [Changelog](CHANGELOG.md)
+[Architecture](docs/ARCHITECTURE.md) · [Installation](docs/INSTALLATION.md) · [Development](docs/DEVELOPMENT.md) · [Recovery engine](docs/RECOVERY_ENGINE.md) · [NTFS and drives](docs/NTFS.md) · [API](docs/API.md) · [Security](docs/SECURITY.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Verification](docs/VERIFICATION.md) · [Limitations](docs/LIMITATIONS.md) · [Changelog](CHANGELOG.md)
 
 ## License and dependencies
 

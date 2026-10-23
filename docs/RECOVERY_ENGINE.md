@@ -8,6 +8,8 @@ Primary MBR and GPT partitions are bounded by image size. GPT validates the head
 
 ## Metadata
 
+NTFS 3.0/3.1 reads deleted MFT base records, validates fixups and allocation bitmaps, and reconstructs resident and plain nonresident streams from explicit mappings. Fragmentation is supported when all mappings fit in the base attribute. Zero-filled content and unsupported mappings remain non-extractable. See [NTFS.md](NTFS.md) for format references, safeguards, and limits.
+
 FAT32 walks active directory chains with cycle and count limits. Deleted short-name entries preserve size and starting cluster; the first name character is unrecoverable. Only a single currently free cluster is sufficient evidence for extraction. Larger deleted files with cleared FAT links remain uncertain. Long names, deleted directories and original timestamps are not reconstructed.
 
 exFAT scans root file entry sets. It reads the allocation bitmap and uses NoFatChain to justify contiguous extents, otherwise follows the surviving FAT chain. All referenced clusters must currently be unallocated. Initialized length must equal data length. Files are not assumed contiguous merely because they were deleted. Subdirectories are deferred.

@@ -14,4 +14,4 @@ if (-not $compilerPath) {
 if (-not $compilerPath) { Write-Warning 'Portable app built in dist\RecoverX. Inno Setup 6 unavailable; installer not built.'; exit 2 }
 & $compilerPath apps/desktop/packaging/recoverx.iss
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-Get-FileHash -Algorithm SHA256 dist/installer/RecoverX-Setup-0.1.0.exe
+Get-FileHash -Algorithm SHA256 dist/installer/RecoverX-Setup-0.2.0.exe
