@@ -142,7 +142,7 @@ npm run typecheck
 npm audit --omit=dev --audit-level=high
 ```
 
-The original 0.1.0 milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. The 0.2.0 upgrade adds NTFS, drive-reader, and desktop safety tests; see the PR checks for its current validation status. Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
+The original 0.1.0 milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. The 0.2.0 upgrade passed 55 Python tests on Linux and 53 on Windows; two Linux-only cases were skipped on Windows and passed on Linux. See the [0.2.0 verification record](docs/VERIFICATION_0_2.md). Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
 
 ## Build the Windows installer
 
@@ -157,7 +157,7 @@ Outputs:
 - `dist/RecoverX/RecoverX.exe` — application executable; keep the entire `dist/RecoverX` directory together.
 - `dist/installer/RecoverX-Setup-0.2.0.exe` — installer, when Inno Setup is available.
 
-The 0.1.0 local unsigned package passed startup testing. For 0.2.0, pull-request CI builds an unsigned installer and portable archive and tests packaged startup on the GitHub Windows runner; inspect the run's actual result before using its artifacts. Installation/uninstallation and clean-machine compatibility remain unqualified. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
+The 0.1.0 local unsigned package passed startup testing. The [0.2.0 CI build](https://github.com/krishnacode120/RecoverX/actions/runs/39949186160) produced an unsigned installer and portable archive and passed packaged startup testing on the GitHub Windows runner. Installation/uninstallation and clean-machine compatibility remain unqualified. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
 
 ## Deploy the web application
 
