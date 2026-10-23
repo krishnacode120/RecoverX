@@ -2,11 +2,12 @@ import argparse
 import json
 import signal
 import sys
+from pathlib import Path
 
 from .engine import run_scan
 from .models import Control, RecoveryError
 from .restore import image_device, recover, write_json_exclusive
-from .source import ImageSource
+from .drives import open_source, protect_drive_output, protect_source_history, select_drive
 from .store import Store, protect_history
 from .windows import WindowsRawSource, enumerate_devices
 
@@ -28,6 +29,9 @@ def main(argv=None):
     export.add_argument("--db", default="recoverx.sqlite")
     export.add_argument("--id", action="append", help="Candidate ID; repeat for multiple files")
     export.add_argument("--allow-image-disk", action="store_true")
+    for command in (scan, export):
+        command.add_argument("--drive", action="store_true", help="Treat IMAGE as a Windows drive letter")
+        command.add_argument("--consent", action="store_true", help="Authorize a read-only drive operation")
     report = sub.add_parser("report")
     report.add_argument("scan_id")
     report.add_argument("destination")
@@ -59,13 +63,23 @@ def main(argv=None):
                 result = image_device(source, args.destination, control, progress)
             print(json.dumps(result))
             return 0
-        if hasattr(args, "image"):
-            protect_history(args.image, args.db)
-        store = Store(args.db)
         if args.command == "report":
+            store = Store(args.db)
             write_json_exclusive(args.destination, store.report(args.scan_id))
             return 0
-        with ImageSource(args.image) as source:
+        if args.drive:
+            if not args.consent:
+                raise RecoveryError("Drive access requires --consent")
+            selection = select_drive(args.image)
+            protect_drive_output(selection, Path(args.db).resolve().parent)
+        else:
+            selection = args.image
+            protect_history(selection, args.db)
+        with open_source(selection) as source:
+            protect_source_history(source, args.db)
+            if args.command == "scan" and args.report and args.drive:
+                protect_drive_output(selection, Path(args.report).resolve().parent)
+            store = Store(args.db)
             if args.command == "scan":
                 scan_id = run_scan(source, store, args.mode, control, progress, args.resume, args.sector_size)
                 if args.report:
