@@ -6,7 +6,9 @@
 
 RecoverX scans explicitly selected Windows drives and raw disk images for deleted filesystem entries and recognizable file content, records the evidence for each candidate, and verifies exported bytes with SHA-256. Storage analysis runs locally. The Next.js website displays imported reports and can optionally store account summaries.
 
-**Status: 0.3.0 development upgrade — recovery workflow completion.** The core works against generated disk images, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [0.3 verification record](docs/VERIFICATION_0_3.md) for completed checks and remaining release gates.
+**Status: 0.3.0 development upgrade — recovery workflow completion.** The core is tested against generated images and files actually deleted by Windows on a disposable virtual disk, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [0.3 verification record](docs/VERIFICATION_0_3.md) for completed checks and remaining release gates.
+
+[Download the unsigned 0.3.0 validation build](https://github.com/krishnacode120/RecoverX/actions/runs/40057334672/artifacts/12546395050) (private GitHub artifact; expires 2027-01-22). Keep downloads and installation off the physical disk containing the deleted files.
 
 ## What works
 
@@ -141,6 +143,8 @@ npm run build
 npm run typecheck
 npm audit --omit=dev --audit-level=high
 ```
+
+The 0.3.0 upgrade passed **75 Linux tests and 73 Windows tests**, plus Windows deletion/drive-reader recovery, web/native checks, and installer install/startup/uninstall validation. Two Linux-only tests skipped on Windows passed on Linux. See the [0.3.0 verification record](docs/VERIFICATION_0_3.md).
 
 The original 0.1.0 milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. The 0.2.0 upgrade passed 55 Python tests on Linux and 53 on Windows; two Linux-only cases were skipped on Windows and passed on Linux. See the [0.2.0 verification record](docs/VERIFICATION_0_2.md). Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
 

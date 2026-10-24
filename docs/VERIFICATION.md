@@ -1,6 +1,6 @@
 # Verification record — 2026-10-22 (Asia/Kolkata)
 
-For the current NTFS/drive upgrade, see [0.2.0 verification](VERIFICATION_0_2.md). The record below describes the original 0.1.0 milestone and its limitations at that time. It does not claim production deployment.
+For the current upgrade, see [0.3.0 verification](VERIFICATION_0_3.md); the earlier NTFS introduction is recorded in [0.2.0 verification](VERIFICATION_0_2.md). The record below describes the original 0.1.0 milestone and its limitations at that time. It does not claim production deployment.
 
 ## Executed locally
 
