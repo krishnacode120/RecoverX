@@ -25,3 +25,11 @@ PNG validates CRCs and decoding; JPEG/BMP/WebP decode; GIF validates blocks and 
 Candidates need resolved extents and a scan hash. Names are normalized, Windows reserved names are escaped, existing destinations are refused, and physical source/destination overlap is checked. `--allow-image-disk` is only for image files. Temporary outputs are flushed and re-read to verify SHA-256, then atomically published with a Windows no-replace rename (POSIX uses a no-replace hard link). POSIX export destinations must support hard links; Windows uses its no-replace rename semantics. No partial file is presented as successful.
 
 Successful export means output bytes match scanned bytes, not that a deleted file is historically authentic. Structurally valid overwritten content can exist. Always compare with an independent original hash when available.
+
+## Result browsing, naming and previews
+
+The SQLite store applies filename/status/extractability filters before pagination and uses whitelisted deterministic SQL sort expressions. Filename matching uses Unicode case folding and literal substring semantics. Persistent-history selection merges the current session atomically; conflicts retain both original databases.
+
+NTFS path reconstruction follows bounded parent references only when sequence numbers and allocation state match. Recycle Bin pairing additionally requires matching SID directory, partition, basename token and file size; original paths remain local and are omitted from JSON reports. Exports use only sanitized basenames.
+
+Content previews run in a worker. They verify the scan hash before showing bounded image thumbnails or ZIP/Office central-directory listings; archive members are never opened or extracted for preview. Preview limits are intentionally smaller than the carving validator's limits.

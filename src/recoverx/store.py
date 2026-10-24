@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from .models import Candidate, RecoveryError
 from .drives import memory_history
+from .windows import volume_disks
 
 
 def protect_history(source_path, db_path):
@@ -159,6 +160,12 @@ class Store:
             for (raw,) in self.db.execute("SELECT source_identity FROM scans")
             if (identity := json.loads(raw)).get("type") == "windows-drive"
         }
+
+    def protect_report_destination(self, scan_id, path):
+        identity = json.loads(self.get(scan_id)["source_identity"])
+        if identity.get("type") == "windows-drive":
+            if identity["disk_number"] in volume_disks(Path(path).resolve().parent):
+                raise RecoveryError("Report destination is on the scan's physical source disk")
 
     def report(self, scan_id):
         scan = self.get(scan_id)

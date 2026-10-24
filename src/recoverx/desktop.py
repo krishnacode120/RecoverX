@@ -596,6 +596,7 @@ class Window(QMainWindow):
                 return
             store = Store(self.db)
             try:
+                store.protect_report_destination(self.scan_id, target)
                 write_json_exclusive(target, store.report(self.scan_id))
                 self.phase.setText("Report exported. No data was uploaded.")
             except Exception as exc:

@@ -117,3 +117,26 @@ def test_preview_hash_bounds_and_cancellation(tmp_path):
         item.size = 5 * 1024 * 1024
         with pytest.raises(RecoveryError, match="4 MiB"):
             preview_content(source, item)
+
+
+def test_saved_report_cannot_write_to_original_drive(monkeypatch, tmp_path):
+    from recoverx.cli import main
+
+    database = tmp_path / "history.sqlite"
+    store = Store(database)
+    try:
+        scan = store.new_scan(
+            SimpleNamespace(identity={"type": "windows-drive", "disk_number": 99}, size=4096), "quick"
+        )
+        store.checkpoint(scan, 4096, "complete")
+        monkeypatch.setattr("recoverx.store.volume_disks", lambda *_: {99})
+        target = tmp_path / "report.json"
+        with pytest.raises(RecoveryError, match="source disk"):
+            store.protect_report_destination(scan, target)
+        assert main(["report", scan, str(target), "--db", str(database)]) == 1
+        assert not target.exists()
+        monkeypatch.setattr("recoverx.store.volume_disks", lambda *_: {100})
+        assert main(["report", scan, str(target), "--db", str(database)]) == 0
+        assert target.exists()
+    finally:
+        store.close()
