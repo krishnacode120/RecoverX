@@ -59,9 +59,20 @@ jobs:
       - run: cmake -S packages/recovery-core -B build/native
       - run: cmake --build build/native --config Release
       - run: ctest --test-dir build/native -C Release --output-on-failure
+  windows-recovery:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: Windows deletion, raw drive reader and image export
+        shell: pwsh
+        run: ./scripts/verify-windows-recovery.ps1
   package:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    needs: [python, web, native]
+    needs: [python, web, native, windows-recovery]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,15 +91,20 @@ jobs:
           $app = Start-Process -FilePath ./dist/RecoverX/RecoverX.exe -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
           if (-not $app.WaitForExit(30000)) { $app.Kill(); throw 'Packaged startup timed out' }
           if ($app.ExitCode -ne 0) { throw "Packaged startup failed: $($app.ExitCode)" }
+      - name: Verify install, installed startup and uninstall
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./scripts/verify-installer.ps1
       - name: Archive portable application and checksums
         shell: pwsh
         run: |
-          Compress-Archive -Path ./dist/RecoverX -DestinationPath ./dist/RecoverX-Portable-0.2.0.zip
-          Get-FileHash ./dist/RecoverX-Portable-0.2.0.zip, ./dist/installer/RecoverX-Setup-0.2.0.exe -Algorithm SHA256 | Format-List | Out-File ./dist/SHA256.txt
+          Compress-Archive -Path ./dist/RecoverX -DestinationPath ./dist/RecoverX-Portable-0.3.0.zip
+          Get-FileHash ./dist/RecoverX-Portable-0.3.0.zip, ./dist/installer/RecoverX-Setup-0.3.0.exe -Algorithm SHA256 | Format-List | Out-File ./dist/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-installer-for-validation
           path: |
             dist/installer/*
-            dist/RecoverX-Portable-0.2.0.zip
+            dist/RecoverX-Portable-0.3.0.zip
             dist/SHA256.txt

@@ -44,3 +44,45 @@ def test_desktop_history_choice_opens_existing_external_history(monkeypatch, tmp
     store.close()
     window.close()
     app.processEvents()
+
+
+def test_history_migration_retains_current_scan_and_filter(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from recoverx.models import Candidate
+
+    app = QApplication.instance() or QApplication([])
+    window = Window()
+    scan = window._history_anchor.new_scan(SimpleNamespace(identity={"test": True}, size=1000), "quick")
+    for n in range(205):
+        window._history_anchor.save(scan, Candidate(f"note-{n}.txt", "txt", n, [], "test"))
+    window._history_anchor.checkpoint(scan, 1000, "complete")
+    window.scan_finished(scan)
+    window.search.setText("note-204")
+    window.apply_filters()
+    assert len(window.items) == 1
+    monkeypatch.setattr("recoverx.desktop.QFileDialog.getExistingDirectory", lambda *_: str(tmp_path))
+    window.choose_history()
+    assert window.scan_id == scan and len(window.items) == 1
+    assert window._history_anchor.count(scan) == 205
+    window.close()
+    app.processEvents()
+
+
+def test_history_guard_covers_previously_scanned_drives(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    app = QApplication.instance() or QApplication([])
+    window = Window()
+    window._history_anchor.new_scan(
+        SimpleNamespace(identity={"type": "windows-drive", "disk_number": 99}, size=4096), "quick"
+    )
+    original = window.db
+    monkeypatch.setattr("recoverx.desktop.QFileDialog.getExistingDirectory", lambda *_: str(tmp_path))
+    monkeypatch.setattr("recoverx.desktop.volume_disks", lambda *_: {99})
+    warnings = []
+    monkeypatch.setattr("recoverx.desktop.QMessageBox.warning", lambda *args: warnings.append(args))
+    window.choose_history()
+    assert window.db == original and warnings
+    assert not (tmp_path / "recoverx-history.sqlite").exists()
+    window.close()
+    app.processEvents()
