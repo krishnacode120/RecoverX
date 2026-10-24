@@ -1,6 +1,5 @@
 """Native interface; every disk operation runs outside the GUI thread."""
 
-from io import BytesIO
 import json
 from pathlib import Path
 import sys
@@ -17,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QInputDialog,
     QMainWindow,
     QMessageBox,
@@ -31,7 +31,8 @@ from PySide6.QtWidgets import (
 )
 
 from .engine import run_scan
-from .models import Control, RecoveryError
+from .models import Control, RecoveryError, Status
+from .preview import preview_content
 from .restore import image_device, recover, write_json_exclusive
 from .drives import (
     DriveSelection,
@@ -42,7 +43,7 @@ from .drives import (
     protect_source_history,
 )
 from .store import Store, protect_history
-from .windows import WindowsRawSource, enumerate_devices
+from .windows import WindowsRawSource, enumerate_devices, volume_disks
 
 
 class Worker(QThread):
@@ -142,6 +143,31 @@ class Window(QMainWindow):
             "I am authorized to analyze this source. I understand recovery is not guaranteed."
         )
         box.addWidget(self.consent)
+        filters = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search filenames across all pages")
+        self.status_filter = QComboBox()
+        self.status_filter.addItem("All content statuses", "")
+        for status in Status:
+            self.status_filter.addItem(status.value, status.value)
+        self.sort = QComboBox()
+        for label, value in (("Discovery order", "discovery"), ("Name", "name"), ("Size", "size"),
+                             ("Type", "kind"), ("Content status", "status")):
+            self.sort.addItem(label, value)
+        self.descending = QCheckBox("Descending")
+        self.extractable = QCheckBox("Extractable only")
+        self.filter_timer = QTimer(self)
+        self.filter_timer.setSingleShot(True)
+        self.filter_timer.setInterval(250)
+        self.filter_timer.timeout.connect(self.apply_filters)
+        self.search.textChanged.connect(lambda: self.filter_timer.start())
+        self.status_filter.currentIndexChanged.connect(self.apply_filters)
+        self.sort.currentIndexChanged.connect(self.apply_filters)
+        self.descending.toggled.connect(self.apply_filters)
+        self.extractable.toggled.connect(self.apply_filters)
+        for widget in (self.search, self.status_filter, self.sort, self.descending, self.extractable):
+            filters.addWidget(widget)
+        box.addLayout(filters)
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["Select / name", "Type", "Bytes", "Content status", "Evidence"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -166,6 +192,9 @@ class Window(QMainWindow):
         self.details.setMaximumHeight(140)
         box.addWidget(self.details)
         box.addWidget(self.thumbnail)
+        preview_button = QPushButton("Preview selected image or archive")
+        preview_button.clicked.connect(self.load_preview)
+        box.addWidget(preview_button)
         self.same_disk = QCheckBox(
             "Allow same-disk output for a disposable image file only (never a selected drive)"
         )
@@ -247,7 +276,7 @@ class Window(QMainWindow):
             "NTFS supports base-record resident/plain nonresident data; continuation, sparse, compressed, "
             "and encrypted streams are unresolved. ext4, EWF, virtual disks and fragmented carving are unsupported. "
             "No recovery of overwritten or TRIM-discarded bytes. Hardware failures need specialist imaging.\n\n"
-            "Previews show bounded metadata and image thumbnails only. Recovered scripts, macros and binaries never run.\n"
+            "Previews show metadata, bounded image thumbnails and ZIP/Office member listings. Recovered scripts, macros and binaries never run.\n"
             "No local network listener starts with this application. No silent privilege elevation.\n\n"
             "History starts in memory; select an external folder to retain it."
         )
@@ -351,21 +380,30 @@ class Window(QMainWindow):
         if not folder:
             return
         target = str(Path(folder) / "recoverx-history.sqlite")
+        if not memory_history(self.db) and Path(self.db).resolve() == Path(target).resolve():
+            return
+        anchor = None
         try:
+            disks = self._history_anchor.source_disk_numbers()
+            if disks and disks & volume_disks(folder):
+                raise RecoveryError("History must be saved off every scanned physical source disk")
             if isinstance(self.source_path, DriveSelection):
                 protect_drive_output(self.source_path, folder)
             elif self.source_path:
                 protect_history(self.source_path, target)
             anchor = Store(target)
+            self._history_anchor.merge_into(anchor)
         except (RecoveryError, OSError, sqlite3.Error) as exc:
+            if anchor is not None:
+                anchor.close()
             QMessageBox.warning(self, "History folder", str(exc))
             return
         self._history_anchor.close()
         self._history_anchor, self.db = anchor, target
-        self.scan_id, self.items = None, []
-        self.table.setRowCount(0)
         self.refresh_history()
-        self.phase.setText(f"Persistent history: {target}. Previous in-memory results are not copied.")
+        if self.scan_id:
+            self.load_results()
+        self.phase.setText(f"History saved to {target}, including this session's scans and results.")
 
     def start_scan(self, checked=False, resume=False):
         if self.busy():
@@ -401,10 +439,16 @@ class Window(QMainWindow):
             return
         store = Store(self.db)
         try:
-            self.items = store.results(self.scan_id, self.page * 200, 200)
-            count, state = store.count(self.scan_id), store.get(self.scan_id)["status"]
+            filters = self.result_filters()
+            count, state = store.count(self.scan_id, **filters), store.get(self.scan_id)["status"]
+            self.page = min(self.page, max(0, (count - 1) // 200))
+            self.items = store.results(
+                self.scan_id, self.page * 200, 200, sort=self.sort.currentData(),
+                descending=self.descending.isChecked(), **filters
+            )
         finally:
             store.close()
+        self.table.blockSignals(True)
         self.table.setRowCount(len(self.items))
         for row, item in enumerate(self.items):
             for col, text in enumerate(
@@ -416,7 +460,10 @@ class Window(QMainWindow):
                     if not item.sha256:
                         cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
                 self.table.setItem(row, col, cell)
-        self.page_label.setText(f"{count} candidates · page {self.page + 1} · {state}")
+        self.table.blockSignals(False)
+        self.details.clear()
+        self.thumbnail.clear()
+        self.page_label.setText(f"{count} matching candidates · page {self.page + 1} · {state}")
         self.phase.setText(f"Scan {state}. Review the evidence before extraction.")
 
     def change_page(self, delta):
@@ -432,39 +479,54 @@ class Window(QMainWindow):
             if item.sha256:
                 self.table.item(row, 0).setCheckState(Qt.CheckState.Checked)
 
+    def result_filters(self):
+        return {
+            "query": self.search.text(),
+            "status": self.status_filter.currentData(),
+            "extractable": self.extractable.isChecked(),
+        }
+
+    def apply_filters(self, *_):
+        if self.busy():
+            return
+        self.page = 0
+        self.load_results()
+
     def preview(self):
         row = self.table.currentRow()
-        if row < 0 or row >= len(self.items):
-            return
-        item = self.items[row]
-        self.details.setPlainText(json.dumps(item.to_dict(), indent=2))
         self.thumbnail.clear()
-        # Metadata preview always available. Decode only small, validated image candidates.
-        if (
-            not self.source_path
-            or self.busy()
-            or item.kind not in ("jpg", "png", "gif", "bmp", "webp")
-            or not item.sha256
-            or item.size > 4 * 1024 * 1024
-        ):
-            return
-        try:
-            from PIL import Image
+        if 0 <= row < len(self.items):
+            self.details.setPlainText(json.dumps(self.items[row].to_dict(), indent=2))
 
-            with open_source(self.source_path) as source:
-                self.assert_source(source)
-                content = b"".join(source.read(e.offset, e.length) for e in item.extents)
-            with Image.open(BytesIO(content)) as image:
-                if image.width * image.height > 16_000_000:
-                    return
-                image.thumbnail((240, 100))
-                stream = BytesIO()
-                image.convert("RGB").save(stream, "PNG")
-            pixmap = QPixmap()
-            pixmap.loadFromData(stream.getvalue(), "PNG")
-            self.thumbnail.setPixmap(pixmap)
-        except Exception:
-            self.thumbnail.setText("Thumbnail unavailable; metadata remains accessible.")
+    def load_preview(self):
+        row = self.table.currentRow()
+        if self.busy() or not self.source_path or not self.scan_id or not 0 <= row < len(self.items):
+            return
+        item, path, scan_id, db = self.items[row], self.source_path, self.scan_id, self.db
+
+        def operation(control, progress):
+            store = Store(db)
+            try:
+                identity = json.loads(store.get(scan_id)["source_identity"])
+            finally:
+                store.close()
+            with open_source(path) as source:
+                if source.identity != identity:
+                    raise RecoveryError("Selected source does not match this scan")
+                return preview_content(source, item, control)
+
+        def finished(result):
+            current = self.table.currentRow()
+            if not 0 <= current < len(self.items) or self.items[current].id != item.id:
+                return
+            if "png" in result:
+                pixmap = QPixmap()
+                pixmap.loadFromData(result["png"], "PNG")
+                self.thumbnail.setPixmap(pixmap)
+            else:
+                self.details.setPlainText(result["text"])
+
+        self.execute(operation, finished)
 
     def assert_source(self, source):
         store = Store(self.db)
