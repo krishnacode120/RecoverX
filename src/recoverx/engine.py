@@ -5,6 +5,7 @@ from .filesystems import ExFAT, FAT32
 from .formats import MAX_CANDIDATE, REGISTRY, validate
 from .models import Candidate, Cancelled, Control, Extent, RecoveryError, Status, no_progress
 from .ntfs import NTFS
+from .recycle import enrich_recycle_bin
 from .partitions import Partition, detect
 from .native import find_offsets
 
@@ -125,6 +126,10 @@ def run_scan(source, store, mode="deep", control=None, progress=no_progress, res
                     ):
                         candidate.sha256 = candidate_hash(source, candidate, control)
                     store.save(scan_id, candidate)
+                if isinstance(adapter, NTFS):
+                    enrich_recycle_bin(
+                        source, store, scan_id, partition.offset, partition.offset + partition.size, control
+                    )
             if not supported:
                 raise RecoveryError(
                     "No supported NTFS/FAT32/exFAT filesystem found; deep scan remains available"

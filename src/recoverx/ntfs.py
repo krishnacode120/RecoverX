@@ -293,7 +293,7 @@ class NTFS:
         page = self._bitmap_page(which, byte // 65536)
         return bool(page[byte % 65536] & (1 << (index % 8)))
 
-    def _filename(self, attrs, number):
+    def _filename_info(self, attrs, number):
         names = []
         for attr in attrs:
             if attr.kind != 0x30 or attr.nonresident:
@@ -305,8 +305,40 @@ class NTFS:
             if namespace > 3:
                 raise RecoveryError("Invalid NTFS filename namespace")
             name = value[66 : 66 + value[64] * 2].decode("utf-16-le", errors="strict")
-            names.append((namespace == 2, name))
-        return sorted(names)[0][1] if names else f"ntfs-record-{number}.bin"
+            if any(ch in name for ch in ("\\", "/", "\x00")) or (name in (".", "..") and number != 5):
+                raise RecoveryError("Invalid NTFS filename component")
+            names.append((namespace == 2, name, u64(value, 0)))
+        return sorted(names)[0][1:] if names else (f"ntfs-record-{number}.bin", None)
+
+    def _filename(self, attrs, number):
+        return self._filename_info(attrs, number)[0]
+
+    def _original_path(self, name, reference, control):
+        """Follow only sequence-matched parents; reject cycles, stale references and excessive depth."""
+        parts, seen = [name], set()
+        for _ in range(64):
+            control.check()
+            if reference is None or reference in seen:
+                return None
+            seen.add(reference)
+            number, sequence = reference & ((1 << 48) - 1), reference >> 48
+            if number >= self.mft.size // self.record_size or not sequence:
+                return None
+            try:
+                parent = self._record(number)
+                if u16(parent, 16) != sequence or not u16(parent, 22) & 2:
+                    return None
+                if bool(u16(parent, 22) & 1) != self._allocated("records", number):
+                    return None
+                if number == 5:
+                    return "\\" + "\\".join(reversed(parts))
+                component, reference = self._filename_info(self._base_attributes(parent), number)
+                if reference is None:
+                    return None
+                parts.append(component)
+            except (RecoveryError, UnicodeError):
+                return None
+        return None
 
     def deleted(self, control, progress):
         total = self.mft.size // self.record_size
@@ -329,7 +361,8 @@ class NTFS:
             try:
                 record = fix_record(raw)
                 attrs = list(attributes(record))
-                candidate.name = self._filename(attrs, number)
+                candidate.name, parent = self._filename_info(attrs, number)
+                candidate.original_path = self._original_path(candidate.name, parent, control)
                 extension = candidate.name.rsplit(".", 1)[-1].lower() if "." in candidate.name else "bin"
                 candidate.kind = extension if re.fullmatch("[a-z0-9]{1,32}", extension) else "bin"
                 self._base_attributes(record)
@@ -353,7 +386,7 @@ class NTFS:
                 candidate.reasons.extend(
                     [
                         "Surviving unnamed data stream and allocation checks passed",
-                        "Original filename when preserved; directory hierarchy is not reconstructed",
+                        "Original paths require surviving sequence-matched parents; export remains flat",
                         "Current bytes may differ from the original; SSD TRIM cannot be reversed",
                     ]
                 )

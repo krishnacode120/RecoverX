@@ -65,6 +65,7 @@ def main(argv=None):
             return 0
         if args.command == "report":
             store = Store(args.db)
+            store.protect_report_destination(args.scan_id, args.destination)
             write_json_exclusive(args.destination, store.report(args.scan_id))
             return 0
         if args.drive:

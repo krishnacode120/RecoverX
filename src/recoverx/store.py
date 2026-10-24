@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from .models import Candidate, RecoveryError
 from .drives import memory_history
+from .windows import volume_disks
 
 
 def protect_history(source_path, db_path):
@@ -21,6 +22,8 @@ class Store:
     def __init__(self, path):
         self.db = sqlite3.connect(path, uri=memory_history(path))
         self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA temp_store=MEMORY")
+        self.db.create_function("casefold", 1, lambda value: str(value or "").casefold(), deterministic=True)
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS scans (
                 id TEXT PRIMARY KEY, source_identity TEXT NOT NULL, mode TEXT NOT NULL,
@@ -78,10 +81,36 @@ class Store:
         )
         self.db.commit()
 
-    def results(self, scan_id, offset=0, limit=200):
+    @staticmethod
+    def _filter(scan_id, query="", kind="", status="", extractable=False):
+        clauses, args = ["scan_id=?"], [scan_id]
+        for field, value in (("name", query), ("kind", kind), ("status", status)):
+            if value:
+                if field == "name":
+                    clauses.append("instr(casefold(json_extract(payload, '$.name')), casefold(?)) > 0")
+                else:
+                    clauses.append(f"json_extract(payload, '$.{field}')=?")
+                args.append(value)
+        if extractable:
+            clauses.append("json_extract(payload, '$.sha256') IS NOT NULL")
+        return " AND ".join(clauses), args
+
+    def results(self, scan_id, offset=0, limit=200, *, sort="discovery", descending=False, **filters):
+        orders = {
+            "discovery": "rowid",
+            "name": "casefold(json_extract(payload, '$.name'))",
+            "size": "CAST(json_extract(payload, '$.size') AS INTEGER)",
+            "kind": "json_extract(payload, '$.kind')",
+            "status": "json_extract(payload, '$.status')",
+        }
+        if sort not in orders or offset < 0 or limit < 1:
+            raise RecoveryError("Invalid result ordering or page")
+        where, args = self._filter(scan_id, **filters)
+        direction = "DESC" if descending else "ASC"
         rows = self.db.execute(
-            "SELECT payload FROM candidates WHERE scan_id=? ORDER BY rowid LIMIT ? OFFSET ?",
-            (scan_id, min(1000, limit), offset),
+            f"SELECT payload FROM candidates WHERE {where} "
+            f"ORDER BY {orders[sort]} {direction}, rowid ASC LIMIT ? OFFSET ?",
+            (*args, min(1000, limit), offset),
         )
         return [Candidate.from_dict(json.loads(r[0])) for r in rows]
 
@@ -93,8 +122,50 @@ class Store:
             raise RecoveryError("Candidate does not belong to this scan")
         return Candidate.from_dict(json.loads(row[0]))
 
-    def count(self, scan_id):
-        return self.db.execute("SELECT COUNT(*) FROM candidates WHERE scan_id=?", (scan_id,)).fetchone()[0]
+    def count(self, scan_id, **filters):
+        where, args = self._filter(scan_id, **filters)
+        return self.db.execute(f"SELECT COUNT(*) FROM candidates WHERE {where}", args).fetchone()[0]
+
+    def merge_into(self, destination):
+        """Merge atomically, retaining existing scans and rejecting conflicting IDs."""
+        self.db.commit()
+        with destination.db:
+            for table, columns in (
+                ("scans", "id,source_identity,mode,status,checkpoint,total,started_at,error"),
+                ("candidates", "id,scan_id,dedup,payload"),
+            ):
+                for row in self.db.execute(f"SELECT {columns} FROM {table}"):
+                    row = tuple(row)
+                    existing = destination.db.execute(
+                        f"SELECT {columns} FROM {table} WHERE id=?", (row[0],)
+                    ).fetchone()
+                    if existing is not None:
+                        if tuple(existing) != row:
+                            raise RecoveryError("History conflict: the same ID contains different data")
+                    else:
+                        placeholders = ",".join("?" for _ in row)
+                        destination.db.execute(
+                            f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", row
+                        )
+            columns = "scan_id,candidate_id,filename,sha256,status,created_at"
+            for row in self.db.execute(f"SELECT {columns} FROM recoveries"):
+                row = tuple(row)
+                match = " AND ".join(f"{column} IS ?" for column in columns.split(","))
+                if destination.db.execute(f"SELECT 1 FROM recoveries WHERE {match}", row).fetchone() is None:
+                    destination.db.execute(f"INSERT INTO recoveries ({columns}) VALUES (?,?,?,?,?,?)", row)
+
+    def source_disk_numbers(self):
+        return {
+            identity["disk_number"]
+            for (raw,) in self.db.execute("SELECT source_identity FROM scans")
+            if (identity := json.loads(raw)).get("type") == "windows-drive"
+        }
+
+    def protect_report_destination(self, scan_id, path):
+        identity = json.loads(self.get(scan_id)["source_identity"])
+        if identity.get("type") == "windows-drive":
+            if identity["disk_number"] in volume_disks(Path(path).resolve().parent):
+                raise RecoveryError("Report destination is on the scan's physical source disk")
 
     def report(self, scan_id):
         scan = self.get(scan_id)

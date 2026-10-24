@@ -7,7 +7,7 @@ The implementation is a monorepo with deliberately separate trust boundaries:
 - `packages/recovery-core`: C++20 bounded signature matcher, native tests, optional pybind11 extension. No C++ component writes to storage.
 - `apps/web`: Next.js/TypeScript UI, Zod report validation, TanStack Query cloud metadata, Zustand in-memory report state, Recharts, Motion, Tailwind, and a shadcn-style Radix/CVA Button.
 - `database/migrations`: normalized PostgreSQL metadata. SQLite retains detailed candidates locally.
-- `tests`: generated disposable FAT32/exFAT/GPT fixtures, parser and restoration tests, bridge authorization tests.
+- `tests`: generated disposable NTFS/FAT32/exFAT/GPT fixtures, parser and restoration tests, bridge authorization tests.
 
 Data path: ImageSource → partition discovery or raw scan → Candidate evidence/extents/hash → SQLite → selected extraction → temporary output → hash re-read → no-replace publication. Reports are independently imported in the browser. Cloud writes include only counts, mode, status, size and timestamps.
 

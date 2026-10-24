@@ -6,7 +6,9 @@
 
 RecoverX scans explicitly selected Windows drives and raw disk images for deleted filesystem entries and recognizable file content, records the evidence for each candidate, and verifies exported bytes with SHA-256. Storage analysis runs locally. The Next.js website displays imported reports and can optionally store account summaries.
 
-**Status: 0.2.0 development upgrade — NTFS and Windows drive selection.** The core works against generated disk images, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [verification record](docs/VERIFICATION.md) for completed checks.
+**Status: 0.3.0 development upgrade — recovery workflow completion.** The core is tested against generated images and files actually deleted by Windows on a disposable virtual disk, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [0.3 verification record](docs/VERIFICATION_0_3.md) for completed checks and remaining release gates.
+
+[Download the unsigned 0.3.0 validation build](https://github.com/krishnacode120/RecoverX/actions/runs/40057334672/artifacts/12546395050) (private GitHub artifact; expires 2027-01-22). Keep downloads and installation off the physical disk containing the deleted files.
 
 ## What works
 
@@ -16,14 +18,14 @@ RecoverX scans explicitly selected Windows drives and raw disk images for delete
 | Quick scan | Conservative NTFS, FAT32, and exFAT deleted-entry analysis within the limits below |
 | Deep scan | Streaming signature discovery, bounded contiguous carving, format validation, progress, cancellation, and persisted resume checkpoints |
 | Export | Destination checks, normalized filenames, no overwrite, temporary output, atomic publication, and SHA-256 verification after writing |
-| Desktop | PySide6 interface for scanning, pause/cancel, paginated results, image thumbnails, selection/export, local history, reports, and Windows device imaging |
+| Desktop | PySide6 interface for scanning, pause/cancel, search and sorting across all result pages, background image/archive previews, selection/export, persistent history migration, reports, and Windows device imaging |
 | Web | Next.js dashboard with JSON report import, search, filters, charts, and candidate evidence; reports stay in browser memory until explicitly saved as cloud summaries |
 | Optional local agent | Token-protected, time-limited, read-only access to one scan's report; the desktop does not start it automatically |
 | Optional cloud accounts | GitHub authentication and PostgreSQL summary endpoints; require configuration and live integration testing |
 
 ### Filesystem and format coverage
 
-- **NTFS 3.0/3.1:** deleted base records, surviving Unicode names, resident files, and plain fragmented nonresident streams with allocation checks. [Scope and workflow](docs/NTFS.md).
+- **NTFS 3.0/3.1:** deleted base records, surviving Unicode names, resident files, and plain fragmented nonresident streams with allocation checks. Surviving sequence-matched parents can supply paths; matching deleted Recycle Bin metadata can restore original names. [Scope and workflow](docs/NTFS.md).
 
 - **FAT32:** traverses active directories and discovers deleted short-name entries. Extraction is limited to unallocated, single-cluster files.
 - **exFAT:** analyzes deleted entry sets in the root directory, checks allocation state, and uses explicit contiguous extents or surviving FAT chains.
@@ -65,7 +67,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m recoverx.desktop
 ```
 
-Click **Select Windows drive…** to choose a drive, or **Open raw image** for an image file. Select **quick** for NTFS/FAT32/exFAT metadata recovery, authorize the source, and start. History begins in memory; choose an external history folder to keep future scans after exit. Drive scans, persistent history, and export rules are explained in [NTFS and drive recovery](docs/NTFS.md).
+Click **Select Windows drive…** to choose a drive, or **Open raw image** for an image file. Select **quick** for NTFS/FAT32/exFAT metadata recovery, authorize the source, and start. History begins in memory; choose an external history folder to retain existing session results and future scans after exit. Existing destination scans are retained; conflicting IDs abort the merge. Use the filename field and status filter across all pages, then choose the sort order. Select a row and click **Preview selected image or archive** for a hash-checked thumbnail or archive member list. Drive scans, persistent history, and export rules are explained in [NTFS and drive recovery](docs/NTFS.md).
 
 Ordinary image-file scans do not require administrator rights. Direct drive reading and physical-device imaging may require an explicitly elevated session; RecoverX does not elevate itself. Recovery output must be on another physical disk. See [installation and device imaging](docs/INSTALLATION.md).
 
@@ -142,6 +144,8 @@ npm run typecheck
 npm audit --omit=dev --audit-level=high
 ```
 
+The 0.3.0 upgrade passed **75 Linux tests and 73 Windows tests**, plus Windows deletion/drive-reader recovery, web/native checks, and installer install/startup/uninstall validation. Two Linux-only tests skipped on Windows passed on Linux. See the [0.3.0 verification record](docs/VERIFICATION_0_3.md).
+
 The original 0.1.0 milestone passed **31 Python tests**, **6 web tests**, native tests, lint/type checks, and the Next.js production build. Generated FAT32 and exFAT recoveries matched known original hashes and left source images unchanged. CI covers Python and desktop startup on Windows/Linux, the web build, and native CMake/CTest. These results do not constitute real-device qualification. The 0.2.0 upgrade passed 55 Python tests on Linux and 53 on Windows; two Linux-only cases were skipped on Windows and passed on Linux. See the [0.2.0 verification record](docs/VERIFICATION_0_2.md). Detailed results, dependency audit findings, and outstanding tests are in [VERIFICATION.md](docs/VERIFICATION.md) and [TESTING.md](docs/TESTING.md).
 
 ## Build the Windows installer
@@ -155,9 +159,9 @@ After installing `.[desktop,dev]` into `.venv`, install Inno Setup 6 and make `I
 Outputs:
 
 - `dist/RecoverX/RecoverX.exe` — application executable; keep the entire `dist/RecoverX` directory together.
-- `dist/installer/RecoverX-Setup-0.2.0.exe` — installer, when Inno Setup is available.
+- `dist/installer/RecoverX-Setup-0.3.0.exe` — installer, when Inno Setup is available.
 
-The 0.1.0 local unsigned package passed startup testing. The [0.2.0 CI build](https://github.com/krishnacode120/RecoverX/actions/runs/39949186160) produced an unsigned installer and portable archive and passed packaged startup testing on the GitHub Windows runner. Installation/uninstallation and clean-machine compatibility remain unqualified. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
+The 0.1.0 local unsigned package passed startup testing. The [0.2.0 CI build](https://github.com/krishnacode120/RecoverX/actions/runs/39949186160) produced an unsigned installer and portable archive and passed packaged startup testing on the GitHub Windows runner. The 0.3 workflow also exercises silent installation, installed startup, and uninstallation on an ephemeral Windows runner; see its verification record for actual results. This does not qualify arbitrary clean machines. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
 
 ## Deploy the web application
 
