@@ -26,7 +26,9 @@ def test_search_sort_and_filter_cover_every_page():
     store = Store(":memory:")
     try:
         scan = populate(store, 405)
-        assert [c.size for c in store.results(scan, 200, 200, sort="size", descending=True)] == list(range(204, 4, -1))
+        assert [c.size for c in store.results(scan, 200, 200, sort="size", descending=True)] == list(
+            range(204, 4, -1)
+        )
         assert store.count(scan, extractable=True) == 202
         assert len(store.results(scan, 200, 200, extractable=True)) == 2
         assert store.results(scan, query="FILE-0404")[0].size == 404
@@ -77,8 +79,10 @@ def zipped(count=1):
 
 def test_archive_preview_never_decompresses_or_extracts(monkeypatch):
     data = zipped()
+
     def forbidden(*args, **kwargs):
         raise AssertionError("Member contents must not be opened")
+
     monkeypatch.setattr(zipfile.ZipFile, "open", forbidden)
     listing = archive_listing(data)
     assert "../unsafe-0.txt" in listing and "100,000" in listing

@@ -151,8 +151,13 @@ class Window(QMainWindow):
         for status in Status:
             self.status_filter.addItem(status.value, status.value)
         self.sort = QComboBox()
-        for label, value in (("Discovery order", "discovery"), ("Name", "name"), ("Size", "size"),
-                             ("Type", "kind"), ("Content status", "status")):
+        for label, value in (
+            ("Discovery order", "discovery"),
+            ("Name", "name"),
+            ("Size", "size"),
+            ("Type", "kind"),
+            ("Content status", "status"),
+        ):
             self.sort.addItem(label, value)
         self.descending = QCheckBox("Descending")
         self.extractable = QCheckBox("Extractable only")
@@ -443,8 +448,12 @@ class Window(QMainWindow):
             count, state = store.count(self.scan_id, **filters), store.get(self.scan_id)["status"]
             self.page = min(self.page, max(0, (count - 1) // 200))
             self.items = store.results(
-                self.scan_id, self.page * 200, 200, sort=self.sort.currentData(),
-                descending=self.descending.isChecked(), **filters
+                self.scan_id,
+                self.page * 200,
+                200,
+                sort=self.sort.currentData(),
+                descending=self.descending.isChecked(),
+                **filters,
             )
         finally:
             store.close()

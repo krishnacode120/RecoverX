@@ -128,8 +128,7 @@ def run_scan(source, store, mode="deep", control=None, progress=no_progress, res
                     store.save(scan_id, candidate)
                 if isinstance(adapter, NTFS):
                     enrich_recycle_bin(
-                        source, store, scan_id, partition.offset,
-                        partition.offset + partition.size, control
+                        source, store, scan_id, partition.offset, partition.offset + partition.size, control
                     )
             if not supported:
                 raise RecoveryError(

@@ -1,4 +1,4 @@
-# NTFS recovery and direct Windows drive scans — 0.2.0
+# NTFS recovery and direct Windows drive scans — 0.3.0
 
 This upgrade adds NTFS 3.0/3.1 deleted-record recovery. It does not turn discarded SSD data into recoverable content. No scan of the user's internal drive was performed during development.
 
@@ -10,7 +10,7 @@ This upgrade adds NTFS 3.0/3.1 deleted-record recovery. It does not turn discard
 4. Review each candidate's evidence. Select extractable results and choose **Recover selected to…** on another physical disk.
 5. For consistency, prefer an offline image when possible. A mounted drive scan is not a snapshot.
 
-History starts in shared process memory: closing the app loses it. **Choose folder for persistent history…** opens a history database in that folder; it does not copy the previous in-memory session. For drive scans, the history folder must be on another physical disk. The app also rejects reports and recovered output on the source disk. Another partition on that same physical disk does not qualify.
+History starts in shared process memory: closing the app loses it. **Choose folder for persistent history…** opens a history database in that folder; it transactionally merges the current session into existing history without overwriting conflicting IDs. For drive scans, the history folder must be on another physical disk. The app also rejects reports and recovered output on the source disk. Another partition on that same physical disk does not qualify.
 
 Image scanning remains available through **Open raw image**. Deep resume is supported only for unchanged images, not mounted drives. Existing 0.1.0 history files are left untouched and are not automatically loaded.
 
@@ -41,7 +41,7 @@ The raw-drive reader converts bounded unaligned parser reads to aligned GENERIC_
 
 ## Remaining limits
 
-Attribute-list continuation and extension records, alternate data streams, sparse/compressed/EFS data, directory reconstruction, original timestamps, and Recycle Bin $I-to-$R name reconstruction are not implemented. An emptied Recycle Bin file may retain an $R name rather than its original user-visible name. A split MFT mapping that needs continuation records fails explicitly. The MFT scan is bounded to 16 million records and runlists to 65,536 runs.
+Attribute-list continuation and extension records, alternate data streams, sparse/compressed/EFS data, full directory-tree export and original timestamp restoration are not implemented. Original paths require surviving parents with matching sequence numbers and consistent directory allocation. Cycles, stale references and paths deeper than 64 parents remain unresolved. Deleted $I metadata (versions 1/2) can rename a uniquely matched, nonempty $R file in the same SID directory and partition, with matching size. Names remain metadata evidence. Missing or ambiguous metadata leaves the $R name unchanged; directory payloads are not reconstructed. Export always uses a normalized basename, never the recorded directory path. A split MFT mapping that needs continuation records fails explicitly. The MFT scan is bounded to 16 million records and runlists to 65,536 runs.
 
 BitLocker-encrypted physical sectors are not decrypted by this reader, even if Windows has unlocked the mounted volume. Windows dynamic/spanned/Storage Spaces volumes that do not map to one ordinary physical partition are unsupported. The existing raw-carving limits remain.
 
@@ -49,7 +49,7 @@ BitLocker-encrypted physical sectors are not decrypted by this reader, even if W
 
 GitHub CI runs constructed NTFS fixtures for resident fixups, fragmented data/MFT mappings, allocation conflicts, zero-filled content, corruption, cancellation, and partition offsets. Linux CI also creates volumes with independent NTFS-3G mkntfs/ntfscp utilities, then simulates deletion by clearing the known test file's allocation flags before recovery. Reference bytes and source hashes are checked.
 
-That independent corpus tests actual formatted NTFS layouts, but does not simulate every Windows deletion operation or SSD TRIM. Mocked Windows I/O tests cover alignment, bounds, identity changes, and separate-disk enforcement. Offscreen UI tests verify memory-only startup and selection without opening a device. Hardware, real Windows deletion, BitLocker behavior, and clean-machine installer lifecycle remain unqualified.
+That independent corpus tests actual formatted NTFS layouts, but does not simulate every Windows deletion operation or SSD TRIM. Mocked Windows I/O tests cover alignment, bounds, identity changes, and separate-disk enforcement. Offscreen UI tests verify memory-only startup and selection without opening a device. The 0.3 CI additionally creates a disposable Windows-formatted fixed VHD, creates and deletes files through Windows, remounts it read-only, scans with the drive reader and exports from the detached image. It verifies reference hashes and unchanged image bytes; see VERIFICATION_0_3.md for results. Hardware, SSD TRIM, BitLocker and arbitrary clean-machine behavior remain unqualified.
 
 ## Format references
 
@@ -60,3 +60,5 @@ That independent corpus tests actual formatted NTFS layouts, but does not simula
 - [NTFS-3G independent test utilities](https://github.com/tuxera/ntfs-3g)
 
 The FSCTL_GET_NTFS_FILE_RECORD API returns in-use records, so it is not used as an undelete enumerator.
+
+Additional naming references: [Microsoft FILE_NAME](https://learn.microsoft.com/en-us/windows/win32/devnotes/file-name) and [Recycle Bin format implementation](https://github.com/EricZimmerman/RBCmd/blob/master/RecycleBin/DollarI.cs). No third-party parser code is bundled for these features.

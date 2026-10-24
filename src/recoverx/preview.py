@@ -51,9 +51,14 @@ def archive_listing(data):
         raise RecoveryError("ZIP end record is missing")
     disk, central_disk, on_disk, total, size, offset, comment = struct.unpack_from("<HHHHIIH", data, end + 4)
     if (
-        disk or central_disk or on_disk != total or total > 1000
-        or size > 512 * 1024 or offset + size > end or end + 22 + comment != len(data)
-        or b"PK\x06\x07" == data[max(0, end - 20):max(0, end - 16)]
+        disk
+        or central_disk
+        or on_disk != total
+        or total > 1000
+        or size > 512 * 1024
+        or offset + size > end
+        or end + 22 + comment != len(data)
+        or b"PK\x06\x07" == data[max(0, end - 20) : max(0, end - 16)]
     ):
         raise RecoveryError("ZIP exceeds listing limits or requires unsupported ZIP64/multidisk parsing")
     with zipfile.ZipFile(BytesIO(data)) as archive:

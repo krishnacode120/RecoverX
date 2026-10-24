@@ -151,9 +151,7 @@ class Store:
                 row = tuple(row)
                 match = " AND ".join(f"{column} IS ?" for column in columns.split(","))
                 if destination.db.execute(f"SELECT 1 FROM recoveries WHERE {match}", row).fetchone() is None:
-                    destination.db.execute(
-                        f"INSERT INTO recoveries ({columns}) VALUES (?,?,?,?,?,?)", row
-                    )
+                    destination.db.execute(f"INSERT INTO recoveries ({columns}) VALUES (?,?,?,?,?,?)", row)
 
     def source_disk_numbers(self):
         return {

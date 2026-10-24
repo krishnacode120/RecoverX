@@ -34,7 +34,8 @@ def parse_metadata(data):
         raise RecoveryError("Unsupported Recycle Bin metadata version or length")
     parsed = PureWindowsPath(path)
     if (
-        not re.match(r"^[A-Za-z]:\\", path) or not parsed.name
+        not re.match(r"^[A-Za-z]:\\", path)
+        or not parsed.name
         or any(part in (".", "..") for part in path.split("\\"))
         or any(ord(ch) < 32 for ch in path)
         or any(ch in path[3:] for ch in '<>:"/|?*')
@@ -86,7 +87,9 @@ def enrich_recycle_bin(source, store, scan_id, start, end, control):
             continue
         if size != item.size:
             continue
-        item.reasons.append(f"Recycle Bin metadata paired with {item.name}; original name is metadata evidence")
+        item.reasons.append(
+            f"Recycle Bin metadata paired with {item.name}; original name is metadata evidence"
+        )
         item.name, item.original_path = name, path
         extension = name.rsplit(".", 1)[-1].lower() if "." in name else "bin"
         item.kind = extension if re.fullmatch("[a-z0-9]{1,32}", extension) else "bin"

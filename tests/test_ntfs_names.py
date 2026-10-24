@@ -22,7 +22,9 @@ def named(name, parent=5, sequence=1):
 def metadata(path, size, version=2):
     encoded = (path + "\0").encode("utf-16-le")
     header = struct.pack("<QQQ", version, size, 133000000000000000)
-    return header + (encoded.ljust(520, b"\0") if version == 1 else struct.pack("<I", len(encoded) // 2) + encoded)
+    return header + (
+        encoded.ljust(520, b"\0") if version == 1 else struct.pack("<I", len(encoded) // 2) + encoded
+    )
 
 
 def corpus(path, mutation=""):
@@ -47,15 +49,17 @@ def corpus(path, mutation=""):
     elif mutation == "cycle":
         records[25] = record([named("Documents", 25)], 25, True, True)
     elif mutation == "outside":
-        records[16] = record([named("deleted-note.txt", 9999), resident(0x80, originals["deleted-note.txt"])], 16)
+        records[16] = record(
+            [named("deleted-note.txt", 9999), resident(0x80, originals["deleted-note.txt"])], 16
+        )
     elif mutation == "duplicate":
         records[30] = records[28]
     elif mutation == "size":
         records[28] = record([named("$IABC123.txt", 27), resident(0x80, metadata(original_path, 999))], 28)
     for number, raw in records.items():
         offset = (4 + number if number < 16 else 32 + number - 16) * 1024
-        image[offset:offset + 1024] = raw
-    attrs = list(attributes(fix_record(image[offsets[0]:offsets[0] + 1024])))
+        image[offset : offset + 1024] = raw
+    attrs = list(attributes(fix_record(image[offsets[0] : offsets[0] + 1024])))
     bitmap = next(a for a in attrs if a.kind == 0xB0)
     for number in (25, 26, 27):
         image[offsets[0] + bitmap.offset + 24 + number // 8] |= 1 << (number % 8)
@@ -120,7 +124,9 @@ def test_recycle_metadata_versions(version):
     assert parse_metadata(metadata(path, 123, version)) == (123, path, "original.txt")
 
 
-@pytest.mark.parametrize("path", [r"C:\folder\..\escape.txt", r"relative\file.txt", r"C:\file:stream", "C:\\bad\0name"])
+@pytest.mark.parametrize(
+    "path", [r"C:\folder\..\escape.txt", r"relative\file.txt", r"C:\file:stream", "C:\\bad\0name"]
+)
 def test_recycle_metadata_rejects_unsafe_paths(path):
     with pytest.raises(RecoveryError):
         parse_metadata(metadata(path, 123))

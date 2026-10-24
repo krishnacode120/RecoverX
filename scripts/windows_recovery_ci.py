@@ -34,7 +34,11 @@ def verify(source, destination=None):
             if destination:
                 recover(source, item, destination, allow_image_disk=True)
                 assert (destination / name).read_bytes() == content
-        print(json.dumps({"verified": list(FILES), "reader": type(source).__name__, "candidates": store.count(scan)}))
+        print(
+            json.dumps(
+                {"verified": list(FILES), "reader": type(source).__name__, "candidates": store.count(scan)}
+            )
+        )
     finally:
         store.close()
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-10-24
+
+- Preserve session history when switching to a persistent folder; reject conflicting IDs and source-disk destinations.
+- Search filenames (Unicode case folding), filter status/extractable files, and sort across all result pages.
+- Run hash-checked image and bounded ZIP/Office directory previews in a worker.
+- Reconstruct NTFS paths through sequence-matched parent directories; conservatively pair deleted Recycle Bin metadata with nonempty contents.
+- Add Windows-formatted VHD real-deletion and read-only drive/image recovery CI, plus installed startup and uninstall validation.
+- Advanced filesystem/container features and production release gates remain listed in LIMITATIONS.md.
+
+
 ## 0.2.0 — development upgrade, 2026-10-23
 
 Adds NTFS deleted-record recovery for resident and plain fragmented nonresident data, update-sequence validation, allocation checks, and uncertain classification for nonempty all-zero content. Adds explicit Windows drive selection, bounded aligned read-only access, CLI drive consent, in-memory desktop history by default, and separate-physical-disk enforcement for persistent drive-scan history, reports and exports. Mounted-drive resume is rejected.
