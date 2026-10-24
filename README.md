@@ -6,7 +6,7 @@
 
 RecoverX scans explicitly selected Windows drives and raw disk images for deleted filesystem entries and recognizable file content, records the evidence for each candidate, and verifies exported bytes with SHA-256. Storage analysis runs locally. The Next.js website displays imported reports and can optionally store account summaries.
 
-**Status: 0.3.0 development upgrade — recovery workflow completion.** The core is tested against generated images and files actually deleted by Windows on a disposable virtual disk, with Windows and Linux CI coverage. Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. There is no verified production deployment or published signed installer. See the [0.3 verification record](docs/VERIFICATION_0_3.md) for completed checks and remaining release gates.
+**Status: 0.3.0 development upgrade — recovery workflow completion.** The core is tested against generated images and files actually deleted by Windows on a disposable virtual disk, with Windows and Linux CI coverage. The [web workspace is live](https://recoverx-flax.vercel.app). Hardware qualification, several filesystem features, cloud integration testing, and signed distribution remain outstanding. See the [0.3 verification record](docs/VERIFICATION_0_3.md) for completed checks and remaining release gates.
 
 [Download the unsigned 0.3.0 validation build](https://github.com/krishnacode120/RecoverX/actions/runs/40057334672/artifacts/12546395050) (private GitHub artifact; expires 2027-01-22). Keep downloads and installation off the physical disk containing the deleted files.
 
@@ -161,11 +161,11 @@ Outputs:
 - `dist/RecoverX/RecoverX.exe` — application executable; keep the entire `dist/RecoverX` directory together.
 - `dist/installer/RecoverX-Setup-0.3.0.exe` — installer, when Inno Setup is available.
 
-The 0.1.0 local unsigned package passed startup testing. The [0.2.0 CI build](https://github.com/krishnacode120/RecoverX/actions/runs/39949186160) produced an unsigned installer and portable archive and passed packaged startup testing on the GitHub Windows runner. The 0.3 workflow also exercises silent installation, installed startup, and uninstallation on an ephemeral Windows runner; see its verification record for actual results. This does not qualify arbitrary clean machines. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
+The local portable application was updated to the checksum-verified 0.3.0 CI package on 2026-10-24 and passed startup testing; the previous 0.1.0 directory was retained as a backup. The updated local source suite passed 73 tests with two Linux-only cases skipped. The 0.3 CI workflow also passed silent installation, installed startup, and uninstallation on an ephemeral Windows runner; see its verification record for details. This does not qualify arbitrary clean machines. Build outputs are excluded from Git, and no signed GitHub Release has been published. Review signing, dependency redistribution obligations, and Inno Setup licensing before distribution.
 
 ## Deploy the web application
 
-Configure Vercel with **`apps/web` as the project root**, the Next.js framework, Node 22, and `npm run build`. The native recovery engine does not run on Vercel.
+Configure Vercel with **`apps/web` as the project root**, the Next.js framework, Node 22 or 24, and `npm run build`. The live `recover_x` project uses Node 24. The native recovery engine does not run on Vercel. See the [deployment verification](docs/DEPLOYMENT.md) for the corrected configuration and checked routes.
 
 Cloud summaries additionally require a PostgreSQL database, the [initial migration](database/migrations/0000_foundation.sql), and these environment variables:
 
@@ -177,7 +177,7 @@ Cloud summaries additionally require a PostgreSQL database, the [initial migrati
 | `AUTH_GITHUB_SECRET` | GitHub OAuth client secret |
 | `AUTH_URL` | Canonical application origin |
 
-For local cloud development, copy `.env.example` to `apps/web/.env.local` and supply your own values. Never commit credentials. Follow [DEPLOYMENT.md](docs/DEPLOYMENT.md) for the callback URL, migrations, and verification steps. Hosted authentication, owner isolation, save/delete operations, and production deployment still require live verification.
+For local cloud development, copy `.env.example` to `apps/web/.env.local` and supply your own values. Never commit credentials. Follow [DEPLOYMENT.md](docs/DEPLOYMENT.md) for the callback URL, migrations, and verification steps. The public website deployment is verified; hosted authentication, owner isolation, and cloud save/delete operations still require integration verification.
 
 ## Repository layout
 

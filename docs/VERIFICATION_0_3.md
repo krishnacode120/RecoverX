@@ -52,6 +52,10 @@ The unsigned installer is for development validation. Runner install/startup/uni
 
 ## Remaining scope and local state
 
-The local source checkout and installed application were left unchanged. Development, test images, builds and installer runs were kept on GitHub; no new installer was downloaded to the user's SSD.
+The initial upgrade was developed and verified on GitHub while the local checkout and application were left unchanged. After the user explicitly requested a local update on 2026-10-24, the checkout was fast-forwarded to `393ca6c` and the local editable Python package updated to 0.3.0. The downloaded outer artifact and portable archive matched their recorded SHA-256 values. Portable archive SHA-256: `587c9bcdda273dc1b47f79b65bc880a30d9fcfad48baadf577ee7f417e02d648`.
 
-Advanced NTFS streams, ext4/TSK and container adapters, failing-drive imaging/resume, directory-tree export, full media previews, real OAuth/database integration, deployment and signing remain unfinished as listed in [LIMITATIONS.md](LIMITATIONS.md). This milestone does not claim the entire original production specification is complete. Software cannot recreate overwritten or inaccessible TRIM-discarded bytes.
+The 0.3.0 portable directory replaced `dist/RecoverX`; `dist/RecoverX-0.1.0-backup` preserves the previous build. The 0.3.0 installer is available at `dist/installer/RecoverX-Setup-0.3.0.exe`. Both portable startup at its final path and source startup passed. The local Windows suite passed 73 tests, with the two Linux-only NTFS-3G cases skipped. The first sandboxed attempt could not create temporary files or use a loopback socket; the authorized verification run with working temporary storage and localhost access passed. No scan of the user's physical drive was performed.
+
+The Vercel project root/framework misconfiguration was repaired and a production deployment verified; see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+Advanced NTFS streams, ext4/TSK and container adapters, failing-drive imaging/resume, directory-tree export, full media previews, real OAuth/database integration, and signing remain unfinished as listed in [LIMITATIONS.md](LIMITATIONS.md). This milestone does not claim the entire original production specification is complete. Software cannot recreate overwritten or inaccessible TRIM-discarded bytes.

@@ -14,6 +14,6 @@ This is a tested development milestone, not a complete production recovery suite
 - Bridge: optional read-only report API, no browser-controlled scanning or recovery. Default workflow imports reports. HTTP-loopback browser compatibility is unverified.
 - Cloud: auth and metadata endpoints require real credentials/migrations. Not an image-processing service. Database integration, quotas and abuse controls need production testing.
 - History: the desktop starts with memory-only history. Choosing a persistent folder transactionally merges session scans, candidates, checkpoints and recovery records, preserving existing scans; conflicting IDs abort without replacing either history. Saving is rejected on any physical source disk recorded in the session. Old AppData history is not automatically loaded.
-- Distribution: build scripts do not imply a signed installer or public release. No live URL exists until actual deployment succeeds.
+- Distribution: build scripts do not imply a signed installer or public native release. The web workspace is deployed at https://recoverx-flax.vercel.app; authenticated database integration and signed native distribution remain unqualified.
 
 No software recovery of overwritten bytes, TRIM-discarded blocks, inaccessible encryption or unreadable hardware is promised.
