@@ -1,225 +1,277 @@
 import Link from "next/link";
 import {
+  ArrowDown,
   ArrowUpRight,
   ArrowRight,
-  ShieldCheck,
-  HardDrive,
-  Fingerprint,
-  ScanLine,
-  FileCheck2,
-  LockKeyhole,
-  Monitor,
   Check,
+  Fingerprint,
+  HardDrive,
+  LockKeyhole,
+  ScanLine,
+  ShieldCheck,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
-import { Button } from "@/components/ui/button";
+import { RecoveryDemo } from "@/components/recovery-demo";
+import styles from "./home.module.css";
+
+const questions = [
+  [
+    "Is a deleted file really gone?",
+    "Deleting a file can leave its contents behind until the storage reuses that space. RecoverX looks for surviving filesystem records and readable content. Recovery depends on what remains; it is never guaranteed.",
+  ],
+  [
+    "What about files deleted from an SSD?",
+    "SSD TRIM can make deleted blocks inaccessible. No recovery software can recreate overwritten or TRIM-discarded bytes. Stop using the affected drive and preserve it before attempting recovery.",
+  ],
+  [
+    "Does this website access my drive?",
+    "No. Scanning and extraction run in the Windows desktop app. The web workspace only reads reports you choose to import. The animation above is an illustration, not a scan of your computer.",
+  ],
+  [
+    "What can the current version recover?",
+    "Version 0.3 supports conservative NTFS, FAT32 and exFAT deleted-entry analysis, plus signature-based carving of supported formats. Some filesystem layouts and file types remain unsupported. Read the documentation for the exact scope.",
+  ],
+  [
+    "Is RecoverX ready for critical evidence?",
+    "This is a development release tested on generated images and real Windows deletions on a disposable virtual disk. Hardware qualification, independent review and signed distribution remain outstanding. Use specialist support for irreplaceable data.",
+  ],
+];
+
 export default function Home() {
   return (
-    <>
-      <header className="site-nav wrap">
+    <div className={styles.home}>
+      <header className={styles.nav}>
         <Brand />
         <nav aria-label="Main navigation">
-          <Link href="#workflow">How it works</Link>
+          <Link href="#workflow">The process</Link>
           <Link href="/docs">Documentation</Link>
-          <Link href="/download">Desktop app</Link>
         </nav>
-        <Button asChild variant="outline">
-          <Link href="/dashboard">
-            Open workspace <ArrowUpRight size={16} />
-          </Link>
-        </Button>
+        <Link className={styles.navAction} href="/dashboard">
+          Open workspace <ArrowUpRight size={16} />
+        </Link>
       </header>
       <main id="main">
-        <section className="hero wrap">
-          <div className="hero-copy">
-            <div className="eyebrow">
-              <span className="live-dot" /> LOCAL-FIRST DATA RECOVERY
+        <section className={styles.hero} aria-labelledby="hero-title">
+          <div className={styles.heroCopy}>
+            <div className={styles.eyebrow}>
+              <span /> YOUR FILES. STILL WORTH LOOKING FOR.
             </div>
-            <h1>
-              Some things
+            <h1 id="hero-title">
+              Not everything
               <br />
-              are worth
-              <br />
-              <span>recovering.</span>
+              lost is <em>gone.</em>
             </h1>
             <p>
-              Find the files that still remain. Analyze disk images, inspect the
-              evidence, and restore your data with a recovery engine that keeps
-              you in control.
+              Find what remains. Recover what matters.
+              <br />A local recovery engine that turns surviving data into files
+              you can inspect, restore, and verify.
             </p>
-            <div className="hero-actions">
-              <Button asChild>
-                <Link href="/download">
-                  <Monitor size={18} /> Get the desktop app{" "}
-                  <ArrowRight size={16} />
-                </Link>
-              </Button>
-              <Button asChild variant="ghost">
-                <Link href="/dashboard">
-                  Explore workspace <ArrowUpRight size={16} />
-                </Link>
-              </Button>
+            <div className={styles.actions}>
+              <Link className={styles.primary} href="/download">
+                Explore the desktop app <ArrowUpRight size={18} />
+              </Link>
+              <Link className={styles.textLink} href="#workflow">
+                See how it works <ArrowDown size={16} />
+              </Link>
             </div>
-            <div className="hero-assurances">
+            <div className={styles.assurances}>
               <span>
-                <Check size={14} /> Read-only analysis
+                <ShieldCheck size={15} /> Read-only source access
               </span>
               <span>
-                <Check size={14} /> No account required locally
+                <LockKeyhole size={14} /> Local by default
               </span>
             </div>
           </div>
-          <div className="hero-visual" aria-label="Recovery workflow diagram">
-            <div className="visual-top">
-              <span>
-                <span className="live-dot" /> RECOVERY ARCHITECTURE
-              </span>
-              <span>01 — 03</span>
-            </div>
-            <div className="orbital">
-              <div className="orbit orbit-one" />
-              <div className="orbit orbit-two" />
-              <div className="disk-core">
-                <HardDrive size={66} strokeWidth={1} />
-                <div>YOUR DATA</div>
-                <small>stays on your machine</small>
-              </div>
-              <span className="floating-label tag-one">
-                <LockKeyhole size={14} /> Read-only source
-              </span>
-              <span className="floating-label tag-two">
-                <Fingerprint size={14} /> SHA-256 verification
-              </span>
-            </div>
-            <div className="visual-pipeline">
-              <div>
-                <span>01</span> Image source
-              </div>
-              <ArrowRight size={16} />
-              <div>
-                <span>02</span> Find evidence
-              </div>
-              <ArrowRight size={16} />
-              <div>
-                <span>03</span> Verify export
-              </div>
-            </div>
-            <div className="visual-foot">
-              <ShieldCheck size={15} /> No source writes. No silent uploads.
-            </div>
+          <RecoveryDemo />
+          <div className={styles.heroBottom}>
+            <span>RECOVERX / DEVELOPMENT EDITION 0.3</span>
+            <span>
+              Built around the evidence. <ArrowDown size={14} />
+            </span>
           </div>
         </section>
-        <div className="compatibility wrap">
-          <span>BUILT AROUND YOUR STORAGE</span>
-          <div>Raw disk images</div>
-          <div>FAT32 metadata</div>
-          <div>exFAT metadata</div>
-          <div>Windows desktop</div>
+        <div className={styles.formats} aria-label="Supported source types">
+          <span>
+            LOOK BENEATH
+            <br />
+            THE FILESYSTEM
+          </span>
+          <strong>NTFS</strong>
+          <strong>FAT32</strong>
+          <strong>exFAT</strong>
+          <strong>Raw images</strong>
+          <span>
+            Windows desktop
+            <br />
+            No account required
+          </span>
         </div>
-        <section id="workflow" className="section wrap">
-          <div className="section-heading">
+        <section
+          id="workflow"
+          className={styles.workflow}
+          aria-labelledby="workflow-title"
+        >
+          <div className={styles.sectionHead}>
             <div>
-              <div className="eyebrow">A CLEAR PATH BACK</div>
-              <h2>Recovery you can inspect.</h2>
+              <div className={styles.eyebrow}>01 / THE PROCESS</div>
+              <h2 id="workflow-title">
+                From missing.
+                <br />
+                To found. To verified.
+              </h2>
             </div>
             <p>
-              Every result has evidence. Every export is checked.
+              Recovery should be understandable.
               <br />
-              You decide what happens next.
+              Follow the evidence at every step.
             </p>
           </div>
-          <div className="steps">
-            {[
-              {
-                icon: HardDrive,
-                n: "01",
-                title: "Start with a safe source",
-                text: "Open a raw disk image, or explicitly authorize read-only imaging of a Windows device onto separate storage.",
-              },
-              {
-                icon: ScanLine,
-                n: "02",
-                title: "Look beneath the surface",
-                text: "Read deleted directory entries or scan raw bytes. Inspect file boundaries, allocation evidence, and validation results.",
-              },
-              {
-                icon: FileCheck2,
-                n: "03",
-                title: "Restore. Then verify.",
-                text: "Export selected candidates to a separate destination. SHA-256 checks confirm the output matches the scanned bytes.",
-              },
-            ].map((s) => (
-              <article key={s.n}>
-                <div className="step-top">
-                  <s.icon size={26} />
-                  <span>{s.n}</span>
-                </div>
-                <h3>{s.title}</h3>
-                <p>{s.text}</p>
-              </article>
-            ))}
+          <div className={styles.steps}>
+            <article>
+              <div className={styles.stepMark}>
+                <HardDrive size={27} strokeWidth={1.3} />
+                <span>01</span>
+              </div>
+              <h3>Choose the source.</h3>
+              <p>
+                Select a Windows drive or a raw disk image. The engine opens the
+                source for reading, with explicit consent for direct drive
+                access.
+              </p>
+              <Link href="/docs">
+                Source & safety guide <ArrowUpRight size={15} />
+              </Link>
+            </article>
+            <article>
+              <div className={styles.stepMark}>
+                <ScanLine size={27} strokeWidth={1.3} />
+                <span>02</span>
+              </div>
+              <h3>Inspect what remains.</h3>
+              <p>
+                Find surviving deleted entries or recognizable file signatures.
+                Review names, allocation evidence, and supported previews before
+                exporting.
+              </p>
+              <Link href="/dashboard">
+                Explore the report workspace <ArrowUpRight size={15} />
+              </Link>
+            </article>
+            <article>
+              <div className={styles.stepMark}>
+                <Fingerprint size={27} strokeWidth={1.3} />
+                <span>03</span>
+              </div>
+              <h3>Recover with evidence.</h3>
+              <p>
+                Export complete candidates to separate storage. SHA-256 checks
+                verify that the exported bytes match the bytes you scanned.
+              </p>
+              <Link href="/docs#safety">
+                Understand verification <ArrowUpRight size={15} />
+              </Link>
+            </article>
           </div>
         </section>
-        <section className="privacy-band wrap">
-          <div className="privacy-icon">
-            <ShieldCheck size={46} strokeWidth={1.2} />
+        <section className={styles.privacy} aria-labelledby="privacy-title">
+          <div>
+            <div className={styles.eyebrow}>02 / YOUR DATA STAYS YOURS</div>
+            <h2 id="privacy-title">
+              On your machine.
+              <br />
+              <span>In your control.</span>
+            </h2>
+            <p>
+              Your disk is not a cloud upload. The desktop engine does the
+              recovery work locally. Bring only the reports you choose into the
+              web workspace.
+            </p>
+            <Link className={styles.textLink} href="/docs#safety">
+              Our approach to safe recovery <ArrowUpRight size={17} />
+            </Link>
+          </div>
+          <div className={styles.boundary}>
+            <div className={styles.boundaryTop}>
+              <LockKeyhole size={16} />
+              <span>THE LOCAL BOUNDARY</span>
+              <span>DESKTOP</span>
+            </div>
+            <div className={styles.boundaryFlow}>
+              <div>
+                <HardDrive size={30} strokeWidth={1.3} />
+                <strong>Your source</strong>
+                <small>Read only</small>
+              </div>
+              <ArrowRight size={20} />
+              <div>
+                <Fingerprint size={30} strokeWidth={1.3} />
+                <strong>Your output</strong>
+                <small>Separate storage</small>
+              </div>
+            </div>
+            <div className={styles.boundaryLine}>
+              <Check size={15} /> No source writes
+            </div>
+            <div className={styles.boundaryLine}>
+              <Check size={15} /> No silent disk uploads
+            </div>
+            <div className={styles.boundaryLine}>
+              <Check size={15} /> You choose every export
+            </div>
+            <div className={styles.boundaryFoot}>
+              The website views reports. It cannot scan your drive.
+            </div>
+          </div>
+        </section>
+        <section className={styles.faq} aria-labelledby="faq-title">
+          <div>
+            <div className={styles.eyebrow}>03 / BEFORE YOU BEGIN</div>
+            <h2 id="faq-title">
+              A little clarity.
+              <br />
+              Before recovery.
+            </h2>
+            <p>
+              Real possibilities.
+              <br />
+              Honest limitations.
+            </p>
           </div>
           <div>
-            <div className="eyebrow">PRIVATE BY DESIGN</div>
-            <h2>Your storage isn’t a cloud upload.</h2>
-            <p>
-              The desktop engine performs recovery locally. The web workspace
-              reads only the scan reports you choose to import. Disk contents
-              and recovered files stay with you.
-            </p>
-          </div>
-          <Link href="/docs#safety">
-            Read the safety guide <ArrowUpRight size={17} />
-          </Link>
-        </section>
-        <section className="section wrap">
-          <div className="section-heading">
-            <div>
-              <div className="eyebrow">KNOW BEFORE YOU SCAN</div>
-              <h2>Clear expectations. Better decisions.</h2>
-            </div>
-          </div>
-          <div className="faq">
-            {[
-              [
-                "Can RecoverX recover every deleted file?",
-                "No. Recovery depends on readable bytes that still exist. Overwritten data, SSD TRIM-discarded blocks, inaccessible encryption, and physical media failure cannot be reversed by this software.",
-              ],
-              [
-                "Can the website scan my USB drive?",
-                "No. Device access runs in the Windows desktop application. This website is a report viewer and documentation platform; it has no physical sector access.",
-              ],
-              [
-                "Which files can it find?",
-                "The initial engine validates common images and ZIP-based documents, and structurally carves PDF, RIFF media, SQLite, ISO media, and 7z. Some other signatures remain unresolved. See the capability matrix for exact limits.",
-              ],
-              [
-                "Is this release ready for critical evidence?",
-                "This is an experimental first release with generated-image tests. Physical-device qualification, independent security review, and signed distribution are release gates. Preserve original media and use specialist support for irreplaceable data.",
-              ],
-            ].map(([q, a]) => (
-              <details key={q}>
+            {questions.map(([question, answer]) => (
+              <details key={question}>
                 <summary>
-                  {q}
-                  <span>+</span>
+                  {question}
+                  <span aria-hidden="true">+</span>
                 </summary>
-                <p>{a}</p>
+                <p>{answer}</p>
               </details>
             ))}
           </div>
         </section>
+        <section className={styles.closing}>
+          <div className={styles.eyebrow}>START WITH WHAT REMAINS</div>
+          <h2>
+            Give your files
+            <br />a second look.
+          </h2>
+          <Link className={styles.primary} href="/download">
+            Get started with RecoverX <ArrowUpRight size={19} />
+          </Link>
+          <p>
+            Windows desktop · Development release · Recovery is not guaranteed
+          </p>
+        </section>
       </main>
-      <footer className="wrap footer">
+      <footer className={styles.footer}>
         <Brand />
         <span>Built to recover. Designed to protect.</span>
         <Link href="/docs">Documentation</Link>
-        <Link href="/contact">Contact & support</Link>
+        <Link href="/contact">
+          Contact <ArrowUpRight size={13} />
+        </Link>
       </footer>
-    </>
+    </div>
   );
 }
